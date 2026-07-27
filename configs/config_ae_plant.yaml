@@ -1,0 +1,159 @@
+# AutoEncoder Configuration for Plant Safety (over-heat) Thermal Anomaly Detection
+
+
+# -----------------------------------------------------------------------
+# Model Configuration
+# -----------------------------------------------------------------------
+model:
+  name: "ConvAutoEncoder"   # ConvAutoEncoder | SimpleAutoEncoder | ThermalRGBConvAE | MultiModalAE
+  input_channels: 1         # 1: grayscale thermal, 3: RGB, 4: thermal+RGB
+  latent_dim: 128
+  base_channels: 32         # 첫 번째 레이어 채널 수 (이후 2배씩 증가, max 512)
+  depth: 4                  # 다운샘플 단계 수 (256px 입력 시 5로 설정해 256 출력 유지)
+
+  # [성능] CBAM Attention 활성화 여부
+  # true: 정확도 우선 / false: 속도 우선 (엣지 배포 등)
+  use_attention: true
+
+  # [성능] VAE 모드
+  # true: KL divergence loss로 정상 분포 경계 명확화 → anomaly score 분리도 향상
+  # false: 일반 AE 모드
+  vae: false
+  vae_kl_weight: 0.0001     # VAE KL loss 가중치 (vae: true 일 때만 사용)
+
+  spatial_latent: true
+  # MultiModalAE 전용
+  image_channels: 4         # MultiModalAE 이미지 채널
+  csv_dim: 10               # CSV 피처 차원
+  fusion_type: "gate"       # gate | concat | add
+                            # gate: 데이터가 modality 기여도를 학습 (권장)
+
+# -----------------------------------------------------------------------
+# Data Configuration
+# -----------------------------------------------------------------------
+# train: 정상(normal)만 사용 → AE가 정상 패턴만 학습. test: normal+anomaly → 평가용.
+data:
+  train_dir: "data/plant/train"   # data/train/normal/*.png (정상만 있어도 정상)
+  val_dir: "data/plant/val"
+  test_dir: "data/plant/test"     # data/test/normal/*.png, data/test/anomaly/*.png
+  image_size: 256
+  batch_size: 32
+  num_workers: 4
+  shuffle: true
+
+  # [검증용] 전체 데이터 중 사용 비율 (1.0 = 100%, 0.1 = 10%). 코드 동작 확인 시 소량만 사용
+  train_fraction: 1.0       # 학습 데이터 사용 비율 (전체 학습 시 1.0 으로 변경)
+  test_fraction: 1.0        # 테스트 데이터 사용 비율 (전체 평가 시 1.0 으로 변경)
+  
+  # Data Augmentation (과적합 완화용으로 다소 강화)
+  augmentation:
+    horizontal_flip: true
+    vertical_flip: false
+    rotation: 15
+    brightness: 0.15
+    contrast: 0.15
+
+# -----------------------------------------------------------------------
+# Training Configuration
+# -----------------------------------------------------------------------
+training:
+  epochs: 300               # 1epoch~2분 기준, 약 6~7시간 분량
+  learning_rate: 0.0001     # depth 5 대형 모델 안정화 (NaN 시 0.00005 등으로 더 낮춤)
+  optimizer: "AdamW"        # Adam | AdamW | SGD
+                            # AdamW: weight decay 내장, 일반적으로 Adam보다 안정적
+  weight_decay: 0.01        # AdamW / SGD 전용 (과적합 완화, 0.001→0.01 강화)
+  grad_clip: 1.0            # Gradient clipping (0.0이면 비활성화)
+
+  scheduler: "CosineAnnealing"  # ReduceLROnPlateau | CosineAnnealing
+                                # CosineAnnealing: 긴 학습에서 수렴 안정성 우수
+  scheduler_params:
+    # ReduceLROnPlateau 전용
+    patience: 5
+    factor: 0.5
+    # CosineAnnealing 전용
+    eta_min: 0.000001       # 최소 learning rate
+
+  early_stopping:
+    patience: 25            # Val loss 25 epoch 연속 개선 없으면 종료 (과적합 방지)
+    min_delta: 0.0001       # 이만큼 이상 개선돼야 "개선"으로 인정
+
+  # [성능] AMP (Automatic Mixed Precision)
+  # CUDA 서버 환경에서 학습 속도 ~1.5-2x 향상. NaN 발생 시 false 로 끄고 학습률 낮추기
+  use_amp: false
+  
+  # [성능] 복합 손실 함수
+  loss:
+    mse_weight: 0.7         # 픽셀 수준 재구성
+    ssim_weight: 0.3        # 구조적 유사도 (texture/edge 보존을 더 강조)
+    perceptual_weight: 0.0  # VGG feature 공간 거리 (torchvision 필요)
+                            # torchvision 미설치 시 자동 비활성화
+  
+  # Checkpoint
+  save_dir: "results/checkpoints/ae_plant"
+  save_every: 10
+  keep_best_only: true
+
+# -----------------------------------------------------------------------
+# Evaluation Configuration
+# -----------------------------------------------------------------------
+evaluation:
+  # Anomaly Score Threshold (모드별 스케일이 달라지므로 auto 권장)
+  # auto: F1 최대화로 매 실행 시 최적 임계값 재탐색 (score_mode 변경 시 필수)
+  threshold: "auto"         # auto or float (e.g., 0.05)
+
+  # [성능] Multi-scale Anomaly Score
+  # 여러 해상도 오차 합산 -> 크기가 다른 이상 패턴 동시 탐지
+  multi_scale: true
+  anomaly_smooth: true
+
+  # [권고] Anomaly Score 계산 방식 — 세 모드 비교 결과 temperature_weighted 최우수로 고정
+  # - pixel_mse:            기존 픽셀 MSE 평균 (엣지/텍스처에 반응)
+  # - temperature_weighted: 고온 영역 가중 (배치 통계) → 동일 절대 온도 = 동일 weight (AUC/F1 최고)
+  # - blur_then_diff:       Gaussian blur 후 차이 → 엣지 제거 시 오히려 성능 하락
+  anomaly_score_mode: "pixel_mse"  # pixel_mse | temperature_weighted | blur_then_diff
+  blur_kernel_size: 5      # 홀수만 유효 (짝수 입력 시 코드에서 +1 보정)
+  blur_sigma: 1.5
+
+  # Metrics
+  metrics:
+    - "AUC"
+    - "F1"
+    - "Precision"
+    - "Recall"
+    - "Accuracy"
+  
+  # Visualization
+  visualize:
+    num_samples: 20
+    save_dir: "results/visualizations/ae_plant"
+
+# -----------------------------------------------------------------------
+# Inference Configuration
+# -----------------------------------------------------------------------
+inference:
+  checkpoint: "results/checkpoints/ae_plant/best.pth"
+  threshold: 0.0
+  output_dir: "results/predictions"
+  save_heatmap: true
+  multi_scale: true
+  anomaly_smooth: true
+  anomaly_score_mode: "temperature_weighted"
+  blur_kernel_size: 5
+  blur_sigma: 1.5
+
+# -----------------------------------------------------------------------
+# Hardware
+# -----------------------------------------------------------------------
+device: "cuda"              # cuda | cpu
+seed: 42
+
+# -----------------------------------------------------------------------
+# Logging
+# -----------------------------------------------------------------------
+logging:
+  use_tensorboard: true
+  tensorboard_dir: "results/tensorboard/ae"
+  use_wandb: false
+  wandb_project: "thermal-anomaly"
+  log_interval: 10          # batch 단위
+
