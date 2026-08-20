@@ -1,4 +1,6 @@
 # Deep Learning Frameworks
+# GPU 사용 시 PyPI 기본 설치(CPU-only)가 아니라 CUDA 빌드로 설치해야 함, 예:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu130
 torch>=2.0.0
 torchvision>=0.15.0
 # tensorflow>=2.13.0  # Optional: VAE, ConvLSTM. Python 3.13+ 미지원 → 필요시 Python 3.11/3.12 환경에서만 설치
@@ -27,7 +29,7 @@ omegaconf>=2.3.0
 
 # Logging & Monitoring
 tensorboard>=2.13.0
-wandb>=0.15.0  # Optional: 실험 추적
+# wandb>=0.15.0  # Optional: 실험 추적. 설치하려면 별도로: pip install wandb
 
 # Progress Bar
 tqdm>=4.65.0
@@ -37,7 +39,7 @@ tqdm>=4.65.0
 # pyod>=1.1.0  # Python Outlier Detection
 
 # Utilities
-albumentations>=1.3.0  # 데이터 증강
+albumentations>=1.3.0,<1.4.0  # 데이터 증강. 1.4+는 albucore→stringzilla 의존, Windows에서 Visual Studio 빌드 도구 없으면 설치 실패
 timm>=0.9.0  # Pre-trained models (PaDiM용)
 
 # Development
