@@ -123,9 +123,14 @@ def main():
 
     rows = []
     roi_y0 = None
+    n_empty = 0
     for npy_path in tqdm(npy_files, desc=args.session):
         idx = int(npy_path.stem)
         raw = np.load(npy_path)
+        if not raw.any():
+            # 녹화가 중간에 끊긴 세션은 .att 뒷부분이 0으로 패딩되어 있음 (실데이터 아님) - 건너뜀
+            n_empty += 1
+            continue
         grid_c = raw.astype(np.float32) / TEMP_SCALE
         if roi_y0 is None:
             roi_y0 = int(grid_c.shape[0] * args.roi_top_frac)
@@ -155,7 +160,8 @@ def main():
             f.write("")
 
     n_sharp = sum(1 for r in rows if r["shape_label"] == "sharp")
-    print(f"완료: 후보 {len(rows)}개 (sharp {n_sharp} / diffuse {len(rows) - n_sharp}) -> {out_csv}")
+    empty_note = f", 빈 프레임(0으로 패딩됨) {n_empty}개 건너뜀" if n_empty else ""
+    print(f"완료: 후보 {len(rows)}개 (sharp {n_sharp} / diffuse {len(rows) - n_sharp}){empty_note} -> {out_csv}")
     if args.sample_viz > 0:
         print(f"오버레이 시각화 -> {viz_dir}")
 

@@ -6,6 +6,11 @@
 
 주의: 여기서 만들어지는 mp4는 AI 학습용 원본이 아니라 육안 확인용 시각화다.
 원본은 build_rgb_thermal_dataset.py로 뽑는 thermal/*.npy(raw uint16, 섭씨 = 값/100)를 써야 한다.
+
+녹화가 중간에 끊긴 세션은 .att 파일 크기(=선언된 프레임 수)만 멀쩡하고 뒷부분이 전부 0으로
+패딩되어 있는 경우가 있다 (detect_hotspot_candidates.py에서 실측으로 확인). 이런 빈 프레임은
+전역 온도 범위 계산에서 제외하고(안 그러면 0이 섞여 범위가 왜곡돼 실제 프레임 대비가 흐려짐),
+영상에도 아예 쓰지 않는다 - 그래서 출력 mp4 프레임 수가 .att가 "선언한" 프레임 수보다 적을 수 있다.
 """
 
 from __future__ import annotations
@@ -29,8 +34,10 @@ def compute_global_range(att_path: Path, sample_every: int, pct_low: float, pct_
     header = read_att_header(att_path)
     samples = []
     for i, frame in enumerate(iter_att_frames_raw(att_path, header)):
-        if i % sample_every == 0:
+        if i % sample_every == 0 and frame.any():
             samples.append(frame.ravel())
+    if not samples:
+        raise RuntimeError(f"{att_path}: 샘플링된 프레임이 전부 빈 프레임(0)임 - sample_every를 줄여서 다시 시도")
     all_vals = np.concatenate(samples)
     lo, hi = np.percentile(all_vals, [pct_low, pct_high])
     return header, float(lo), float(hi)
@@ -74,15 +81,22 @@ def main():
 
     print(f"[2/2] {n}프레임 렌더링 중 -> {out_path} ({w}x{h} @ {fps}fps)")
     span = max(hi - lo, 1e-6)
+    n_written = 0
+    n_empty = 0
     for frame in tqdm(iter_att_frames_raw(att_path, header), total=n):
+        if not frame.any():
+            n_empty += 1
+            continue
         norm = np.clip((frame.astype(np.float32) - lo) / span, 0, 1)
         img8 = (norm * 255).astype(np.uint8)
         colored = cv2.applyColorMap(img8, cv2.COLORMAP_JET)
         if args.upscale != 1:
             colored = cv2.resize(colored, (w, h), interpolation=cv2.INTER_NEAREST)
         writer.write(colored)
+        n_written += 1
     writer.release()
-    print(f"완료: {out_path}")
+    empty_note = f" ({n_empty}개 빈 프레임 건너뜀)" if n_empty else ""
+    print(f"완료: {n_written}프레임 기록{empty_note} -> {out_path}")
 
 
 if __name__ == "__main__":
