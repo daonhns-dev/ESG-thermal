@@ -1,0 +1,53 @@
+# Deep Learning Frameworks
+torch>=2.0.0
+torchvision>=0.15.0
+# tensorflow>=2.13.0  # Optional: VAE, ConvLSTM. Python 3.13+ 미지원 → 필요시 Python 3.11/3.12 환경에서만 설치
+
+# Computer Vision
+opencv-python>=4.8.0
+pillow>=10.0.0
+scikit-image>=0.21.0
+
+# Scientific Computing
+numpy>=1.24.0
+scipy>=1.11.0
+pandas>=2.0.0
+
+# Visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0
+plotly>=5.14.0
+
+# Metrics & Evaluation
+scikit-learn>=1.3.0
+
+# Configuration
+pyyaml>=6.0
+omegaconf>=2.3.0
+
+# Logging & Monitoring
+tensorboard>=2.13.0
+wandb>=0.15.0  # Optional: 실험 추적
+
+# Progress Bar
+tqdm>=4.65.0
+
+# Anomaly Detection Libraries (Optional)
+# anomalib>=0.7.0  # Intel Anomalib - PaDiM, Patchcore 등
+# pyod>=1.1.0  # Python Outlier Detection
+
+# Utilities
+albumentations>=1.3.0  # 데이터 증강
+timm>=0.9.0  # Pre-trained models (PaDiM용)
+
+# Development
+jupyter>=1.0.0
+ipykernel>=6.25.0
+black>=23.7.0  # 코드 포맷터
+flake8>=6.1.0  # 린터
+pytest>=7.4.0  # 테스트
+
+# Image Format Support
+imageio>=2.31.0
+imageio-ffmpeg>=0.4.9  # 비디오 처리
+

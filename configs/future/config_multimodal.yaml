@@ -1,0 +1,29 @@
+# Phase 3: Thermal + RGB + CSV 멀티모달 AE
+
+model:
+  name: "MultiModalAE"
+  image_channels: 4
+  csv_dim: 10
+  latent_dim: 128
+  image_size: 256
+  fusion_type: "concat"
+
+data:
+  thermal_dir: "data/thermal"
+  rgb_dir: "data/rgb"
+  csv_dir: "data/csv"
+  image_size: 256
+  batch_size: 16
+  num_workers: 4
+
+training:
+  epochs: 100
+  learning_rate: 0.001
+  save_dir: "results/checkpoints/multimodal"
+
+evaluation:
+  threshold: "auto"
+  threshold_percentile: 95
+
+device: "cuda"
+seed: 42

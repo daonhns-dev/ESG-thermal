@@ -1,0 +1,28 @@
+# Phase 2: Thermal + RGB 4채널 Conv-AE
+
+model:
+  name: "ThermalRGBConvAE"
+  input_channels: 4  # [Thermal, R, G, B]
+  latent_dim: 128
+  image_size: 256
+
+data:
+  thermal_dir: "data/thermal"
+  rgb_dir: "data/rgb"
+  train_dir: "data/train"
+  test_dir: "data/test"
+  image_size: 256
+  batch_size: 16
+  num_workers: 4
+
+training:
+  epochs: 100
+  learning_rate: 0.001
+  save_dir: "results/checkpoints/thermal_rgb"
+
+evaluation:
+  threshold: "auto"
+  threshold_percentile: 95
+
+device: "cuda"
+seed: 42

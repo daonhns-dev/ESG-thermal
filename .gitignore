@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# Model checkpoints
+*.pt
+*.pth
+
+# Data / results (large or generated)
+data/
+results/
+EfficientAD/ckptSmall/
+EfficientAD/ckptMedium/
+
+# Images (generated plots/renders)
+*.png
+*.jpg
+*.jpeg
+
+# Temp files
+*.tmp
+*.bak
+*.swp
+*.DS_Store
+*.log
+
+# claude
+.claude/
