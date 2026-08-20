@@ -78,6 +78,15 @@ def find_sessions(source: Path, only: Optional[List[str]] = None) -> List[Sessio
     return sessions
 
 
+def imwrite_unicode(path: Path, img: np.ndarray, ext: str, params: Optional[list] = None) -> bool:
+    """cv2.imwrite는 Windows에서 비-ASCII(한글 등) 경로를 못 씀 -> imencode + 일반 파일쓰기로 우회"""
+    ok, buf = cv2.imencode(ext, img, params or [])
+    if not ok:
+        return False
+    path.write_bytes(buf.tobytes())
+    return True
+
+
 def colorize(frame_c: np.ndarray) -> np.ndarray:
     """섭씨 온도 배열 -> JET 컬러맵 BGR 이미지 (프레임별 min-max 정규화)"""
     lo, hi = frame_c.min(), frame_c.max()
@@ -156,11 +165,11 @@ def process_session(
         np.save(thermal_dir / f"{fname}.npy", frame_raw)
 
         if cap is not None:
-            cv2.imwrite(str(rgb_dir / f"{fname}.jpg"), rgb, [cv2.IMWRITE_JPEG_QUALITY, jpg_quality])
+            imwrite_unicode(rgb_dir / f"{fname}.jpg", rgb, ".jpg", [cv2.IMWRITE_JPEG_QUALITY, jpg_quality])
 
         if viz_stride > 0 and idx % viz_stride == 0:
             frame_c = frame_raw.astype(np.float32) / TEMP_SCALE
-            cv2.imwrite(str(viz_dir / f"{fname}.png"), colorize(frame_c))
+            imwrite_unicode(viz_dir / f"{fname}.png", colorize(frame_c), ".png")
 
         entry = {"idx": idx}
         if idx < len(atg_records):
