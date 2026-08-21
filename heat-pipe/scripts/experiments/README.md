@@ -13,14 +13,15 @@
 
 ## 실측 데이터(협력업체 `.att`/`.atg`/`.avi`) 파이프라인
 
-`build_rgb_thermal_dataset.py`로 세션 데이터셋을 만든 뒤 순서대로:
+`../build_rgb_thermal_dataset.py`로 세션 데이터셋을 만든 뒤 순서대로:
 
 | 스크립트 | 목적 | 입력 → 출력 |
 |----------|------|------|
-| `detect_hotspot_candidates.py` | 세션 하나의 도로면 ROI 내 국소 열원 후보 탐지 | `thermal/*.npy` → `candidates.csv` |
-| `track_hotspot_candidates.py` | 프레임 간 후보 추적 — 동행 차량(다른 패턴) vs 고정 지면 이상(다가가며 커지다 하단 이탈) 구분 | `candidates.csv` → `tracks.csv` |
-| `match_gps_passes.py` | 여러 세션(=여러 날짜 통과분)을 GPS 기준으로 묶어 반복 통과 비교 | 전체 세션 `metadata.json`+`candidates.csv`(+`tracks.csv`) → `gps_bin_timeline.csv` |
-| `render_gps_bin_comparisons.py` | GPS bin별 세션 간 프레임을 이미지로 렌더링 (육안 검토용) | `gps_bin_timeline.csv` → `gps_bin_review/*.png` |
-| `export_gps_kml.py` | 세션 GPS 궤적을 Google Earth/My Maps용 KML로 내보내기 | `metadata.json` → `gps_tracks.kml` |
+| `analyze_session.py --session <이름>` | 세션 하나: (1) 도로면 ROI 내 국소 열원 후보 탐지 → (2) 프레임 간 추적으로 동행 차량(다른 패턴) vs 고정 지면 이상(다가가며 커지다 하단 이탈) 구분. `--skip-detect`/`--skip-track`으로 단계별 재실행 가능 | `thermal/*.npy` → `candidates.csv` → `tracks.csv` |
+| `gps_tools.py match` | 여러 세션(=여러 날짜 통과분)을 GPS 기준으로 묶어 반복 통과 비교 | 전체 세션 `metadata.json`+`candidates.csv`(+`tracks.csv`) → `gps_bin_timeline.csv` |
+| `gps_tools.py review` | GPS bin별 세션 간 프레임을 이미지로 렌더링 (육안 검토용) | `gps_bin_timeline.csv` → `gps_bin_review/*.png` |
+| `gps_tools.py kml` | 세션 GPS 궤적을 Google Earth/My Maps용 KML로 내보내기 | `metadata.json` → `gps_tracks.kml` |
+
+공용 함수(`imwrite_unicode`, `colorize`)는 `../../utils/thermal_viz.py`에 있음 — Windows 한글 경로 `cv2.imwrite` 버그 우회 + JET 컬러맵 변환.
 
 현재 결론: 위 파이프라인으로 찾은 후보는 전부 차량 등 도로 위 다른 물체로 확인됨 — 배관 매설 경로 좌표 없이는 신뢰성 있는 검증이 어려움. 자세한 내용은 `EXPERIMENT_SUMMARY.md` 참고.

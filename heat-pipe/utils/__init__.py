@@ -25,6 +25,11 @@ from .losses import (
     stae_loss,
 )
 
+from .thermal_viz import (
+    imwrite_unicode,
+    colorize,
+)
+
 __all__ = [
     # Metrics
     'compute_anomaly_scores',
@@ -43,5 +48,9 @@ __all__ = [
     'pretraining_penalty',
     'ae_loss',
     'stae_loss',
+
+    # Thermal viz
+    'imwrite_unicode',
+    'colorize',
 ]
 

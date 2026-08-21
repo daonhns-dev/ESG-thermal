@@ -494,19 +494,6 @@ def main() -> None:
         "--input_dir", type=str, default=None,
         help="평가할 데이터 디렉토리 (미지정 시 config의 data.test_dir 사용)",
     )
-    parser.add_argument(
-        "--validate_csv",
-        action="store_true",
-        help="추론 후 CSV 온도 데이터와 대조 검증 (validate_efficientad_csv.py)",
-    )
-    parser.add_argument(
-        "--csv_dir", type=str, default=None,
-        help="--validate_csv 시 CSV 루트 (기본: data/csv)",
-    )
-    parser.add_argument(
-        "--num_viz", type=int, default=20,
-        help="--validate_csv 시 비교 heatmap 저장 개수",
-    )
     args = parser.parse_args()
  
     with open(args.config, "r", encoding="utf-8") as f:
@@ -541,30 +528,16 @@ def main() -> None:
             save_path=str(out_dir / f"single_{Path(args.image).stem}.png"),
         )
     else:
-        if args.validate_csv:
-            from scripts.validate_efficientad_csv import run_csv_validation
-
-            run_csv_validation(
-                cfg,
-                threshold_override=args.threshold,
-                alpha=args.alpha,
-                agg=args.agg,
-                topk_ratio=args.topk_ratio,
-                input_dir=args.input_dir,
-                csv_dir=args.csv_dir,
-                num_viz=args.num_viz,
-            )
-        else:
-            evaluate(
-                cfg,
-                threshold_override=args.threshold,
-                alpha=args.alpha,
-                agg=args.agg,
-                topk_ratio=args.topk_ratio,
-                save_fp_heatmaps=args.save_fp_heatmaps,
-                threshold_sweep=args.threshold_sweep,
-                input_dir=args.input_dir,
-            )
+        evaluate(
+            cfg,
+            threshold_override=args.threshold,
+            alpha=args.alpha,
+            agg=args.agg,
+            topk_ratio=args.topk_ratio,
+            save_fp_heatmaps=args.save_fp_heatmaps,
+            threshold_sweep=args.threshold_sweep,
+            input_dir=args.input_dir,
+        )
  
  
 if __name__ == "__main__":

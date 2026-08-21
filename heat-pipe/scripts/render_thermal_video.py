@@ -8,7 +8,7 @@
 원본은 build_rgb_thermal_dataset.py로 뽑는 thermal/*.npy(raw uint16, 섭씨 = 값/100)를 써야 한다.
 
 녹화가 중간에 끊긴 세션은 .att 파일 크기(=선언된 프레임 수)만 멀쩡하고 뒷부분이 전부 0으로
-패딩되어 있는 경우가 있다 (detect_hotspot_candidates.py에서 실측으로 확인). 이런 빈 프레임은
+패딩되어 있는 경우가 있다 (scripts/experiments/analyze_session.py에서 실측으로 확인). 이런 빈 프레임은
 전역 온도 범위 계산에서 제외하고(안 그러면 0이 섞여 범위가 왜곡돼 실제 프레임 대비가 흐려짐),
 영상에도 아예 쓰지 않는다 - 그래서 출력 mp4 프레임 수가 .att가 "선언한" 프레임 수보다 적을 수 있다.
 """
@@ -28,6 +28,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from datasets.att_atg_io import TEMP_SCALE, att_frame_count, iter_att_frames_raw, read_att_header
+from utils.thermal_viz import colorize
 
 
 def compute_global_range(att_path: Path, sample_every: int, pct_low: float, pct_high: float):
@@ -80,16 +81,13 @@ def main():
         raise RuntimeError(f"VideoWriter를 열 수 없음: {out_path}")
 
     print(f"[2/2] {n}프레임 렌더링 중 -> {out_path} ({w}x{h} @ {fps}fps)")
-    span = max(hi - lo, 1e-6)
     n_written = 0
     n_empty = 0
     for frame in tqdm(iter_att_frames_raw(att_path, header), total=n):
         if not frame.any():
             n_empty += 1
             continue
-        norm = np.clip((frame.astype(np.float32) - lo) / span, 0, 1)
-        img8 = (norm * 255).astype(np.uint8)
-        colored = cv2.applyColorMap(img8, cv2.COLORMAP_JET)
+        colored = colorize(frame.astype(np.float32), lo, hi)
         if args.upscale != 1:
             colored = cv2.resize(colored, (w, h), interpolation=cv2.INTER_NEAREST)
         writer.write(colored)

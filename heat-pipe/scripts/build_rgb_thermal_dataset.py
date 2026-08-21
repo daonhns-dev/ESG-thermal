@@ -50,6 +50,7 @@ from datasets.att_atg_io import (
     read_att_header,
     read_atg,
 )
+from utils.thermal_viz import imwrite_unicode, colorize
 
 DEFAULT_SOURCE = r"E:\열수송관 모니터링 데이터"
 DEFAULT_OUTPUT = r"E:\열수송관 모니터링 데이터\dataset"
@@ -76,24 +77,6 @@ def find_sessions(source: Path, only: Optional[List[str]] = None) -> List[Sessio
     if only:
         sessions = [s for s in sessions if s.name in only]
     return sessions
-
-
-def imwrite_unicode(path: Path, img: np.ndarray, ext: str, params: Optional[list] = None) -> bool:
-    """cv2.imwrite는 Windows에서 비-ASCII(한글 등) 경로를 못 씀 -> imencode + 일반 파일쓰기로 우회"""
-    ok, buf = cv2.imencode(ext, img, params or [])
-    if not ok:
-        return False
-    path.write_bytes(buf.tobytes())
-    return True
-
-
-def colorize(frame_c: np.ndarray) -> np.ndarray:
-    """섭씨 온도 배열 -> JET 컬러맵 BGR 이미지 (프레임별 min-max 정규화)"""
-    lo, hi = frame_c.min(), frame_c.max()
-    norm = np.zeros_like(frame_c, dtype=np.uint8) if hi <= lo else (
-        ((frame_c - lo) / (hi - lo) * 255).astype(np.uint8)
-    )
-    return cv2.applyColorMap(norm, cv2.COLORMAP_JET)
 
 
 def process_session(

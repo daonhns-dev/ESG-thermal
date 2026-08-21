@@ -23,7 +23,7 @@ ESG 협력업체로부터 열수송관(지하 매설 district heating pipe) 모�
 
 ## 3. 이상탐지 방법 검증 — 시도와 실패 원인
 
-### 3-1. 형태 기반(sharp/diffuse) — `scripts/experiments/detect_hotspot_candidates.py` v1
+### 3-1. 형태 기반(sharp/diffuse) — `scripts/experiments/detect_hotspot_candidates.py`(현재 `analyze_session.py`로 통합됨) v1
 
 배경 대비 z-score로 국소 열원을 찾고, 원형도/edge sharpness로 "배관 결함(sharp)" vs "노이즈(diffuse)"를 구분하려 함.
 
@@ -35,7 +35,7 @@ ESG 협력업체로부터 열수송관(지하 매설 district heating pipe) 모�
 
 **부분 성공, 부분 실패**: 하늘/신호등/건물은 걸러졌지만, **도로 위 다른 차량**은 ROI 안에 있으므로 여전히 잡힘(차량 하부, 백라이트).
 
-### 3-3. 프레임 간 추적(움직임 패턴) — `scripts/experiments/track_hotspot_candidates.py`
+### 3-3. 프레임 간 추적(움직임 패턴) — `scripts/experiments/track_hotspot_candidates.py`(현재 `analyze_session.py`로 통합됨)
 
 "고정된 지면 위 이상은 다가가며 커지다 화면 하단에서 사라짐, 동행 차량은 다른 패턴" 가설로 프레임 간 후보를 추적, `area_growth_ratio`+`exits_bottom`+`circularity`로 `likely_ground_fixed` 판정.
 
@@ -47,7 +47,7 @@ ESG 협력업체로부터 열수송관(지하 매설 district heating pipe) 모�
 
 차량 등 RGB로 감지해서 제외하는 방안을 검토했으나, **RGB(800×600)와 열화상(384×288) 카메라의 화각이 서로 다르고(열화상이 더 좁음, 거리별로 시차도 다르게 나타남 — parallax)**, 단순 크롭/리사이즈로는 정렬이 안 됨을 실측으로 확인(맨홀 랜드마크 기준 크롭 비율 테스트). 제대로 하려면 카메라 캘리브레이션이 필요해 보류.
 
-### 3-5. GPS 기반 반복 통과 비교 — `scripts/experiments/match_gps_passes.py`
+### 3-5. GPS 기반 반복 통과 비교 — `scripts/experiments/match_gps_passes.py`(현재 `gps_tools.py match`로 통합됨)
 
 같은 날 안에서는 세션들이 연속 주행을 파일 단위로 쪼갠 것뿐이라 겹치는 구간이 거의 없었음(50m 격자에서 1개). **8/13+8/14 이틀치를 합치니 실제로 같은 시간대(오전 9시경)에 같은 구간을 재방문한 사례를 다수 확인** — 정기 순찰 루트가 있는 것으로 보임. 파이프라인 자체는 유효하게 작동함을 확인.
 
@@ -68,4 +68,4 @@ ESG 협력업체로부터 열수송관(지하 매설 district heating pipe) 모�
 
 - ESG/협력업체로부터 **배관 매설 경로의 GPS/GIS 좌표** (도면이 아니라 좌표 형태로) 확보 — 이게 있어야 "배관 근처 프레임만" 걸러서 분석 범위를 좁힐 수 있음. 이게 프로젝트 진행 가능 여부를 가르는 핵심 전제조건.
 - 만약 좌표를 못 구하면: 촬영 방식 자체를 배관에 초점을 맞춘 근접 촬영으로 바꾸거나, RTK급 고정밀 GPS 장비로 재촬영하는 등 데이터 수집 단계부터 재설계 필요.
-- (참고용으로 만들어둔 도구들은 재개 시 그대로 재사용 가능: `att_atg_io.py`, `build_rgb_thermal_dataset.py`, `render_thermal_video.py`, `detect_hotspot_candidates.py`, `track_hotspot_candidates.py`, `match_gps_passes.py`, `render_gps_bin_comparisons.py`, `export_gps_kml.py`)
+- (참고용으로 만들어둔 도구들은 재개 시 그대로 재사용 가능: `att_atg_io.py`, `build_rgb_thermal_dataset.py`, `render_thermal_video.py`, `experiments/analyze_session.py`(후보 탐지+추적), `experiments/gps_tools.py`(match/review/kml 서브커맨드) — 2026-08-20 정리 과정에서 스크립트 7개를 4개로 통합하고 NCC 전용 실험 스크립트 30개는 삭제함)
