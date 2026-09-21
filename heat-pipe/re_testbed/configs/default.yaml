@@ -1,0 +1,46 @@
+# Default configuration for re_testbed review experiments.
+
+paths:
+  dataset_root: "E:/열수송관 모니터링 데이터/dataset"
+  output_root: "results/re_testbed"
+
+roi:
+  # Prototype baseline: exclude upper non-ground view, then split lower frame
+  # into 3 or 4 equal review ROIs.
+  top_frac: 0.55
+  analysis_mode: "roi"
+
+background:
+  # gaussian and median are inherited from the existing baseline.
+  # top_hat is available here as an additional classical background option.
+  method: "gaussian"
+  param: 45
+
+zscore:
+  threshold: 3.0
+
+single_frame_review:
+  output_dir: "results/re_testbed/single_frame_review"
+
+single_session_review:
+  output_dir: "results/re_testbed/single_session_review"
+  max_dist: 25.0
+  max_gap: 1
+  bottom_margin: 5
+  growth_thresh: 1.3
+  min_circularity: 0.35
+
+candidate:
+  min_area: 20
+  max_area_frac: 0.25
+
+ranking:
+  weights:
+    max_z: 0.45
+    mean_z: 0.25
+    area_log: 0.15
+    edge_sharpness: 0.10
+    circularity: 0.05
+
+algorithm_benchmark:
+  requires_reviewer_labels: true

@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import math
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -45,14 +44,12 @@ from scipy.ndimage import label
 from tqdm import tqdm
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-CNN_DIR = PROJECT_ROOT / "CNN"
-for p in (PROJECT_ROOT, CNN_DIR):
-    if str(p) not in sys.path:
-        sys.path.insert(0, str(p))
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-from visualize_local_anomaly_map import z_score_map  # noqa: E402
-from heat_pipe_shape_heuristic import edge_sharpness, circularity  # noqa: E402
 from datasets.att_atg_io import TEMP_SCALE  # noqa: E402
+from utils.thermal_anomaly import circularity, edge_sharpness, robust_z_score_map  # noqa: E402
+from utils.thermal_tracks import build_tracks, summarize_track  # noqa: E402
 from utils.thermal_viz import imwrite_unicode, colorize  # noqa: E402
 
 DEFAULT_DATASET_ROOT = r"E:\열수송관 모니터링 데이터\dataset"
@@ -64,7 +61,7 @@ def find_candidates(roi_grid_c: np.ndarray, roi_y0: int, bg_method: str, bg_para
     """roi_grid_c: 이미 하늘/나무 등을 잘라낸 ROI(도로면 추정 영역)의 섭씨 온도 배열.
     배경 추정도 이 ROI 안에서만 이뤄지므로, 반환되는 bbox의 y좌표는 전체 프레임 기준으로
     맞추기 위해 roi_y0을 더해서 돌려준다."""
-    z = z_score_map(roi_grid_c, bg_method, bg_param)
+    z = robust_z_score_map(roi_grid_c, bg_method, bg_param)
     mask = z > z_thresh
     labeled, n = label(mask)
     max_area = roi_grid_c.size * max_area_frac
@@ -163,86 +160,6 @@ def load_candidates_by_frame(session_dir: Path) -> dict:
                 row[k] = float(row[k])
             by_frame[row["frame_idx"]].append(row)
     return by_frame
-
-
-def centroid(c):
-    return ((c["bbox_x0"] + c["bbox_x1"]) / 2, (c["bbox_y0"] + c["bbox_y1"]) / 2)
-
-
-def build_tracks(by_frame: dict, max_dist: float, max_gap: int):
-    """그리디 최근접 매칭. 각 track은 [(frame_idx, candidate_dict), ...]"""
-    active = []  # [{"points": [...], "last_frame": int}]
-    finished = []
-    frames = sorted(by_frame.keys())
-    for f in frames:
-        cands = list(by_frame[f])
-        used = set()
-        for track in active:
-            last_frame, last_c = track["points"][-1]
-            if f - last_frame > max_gap:
-                continue  # 아래에서 gap 초과 track은 정리
-            lx, ly = centroid(last_c)
-            best, best_dist = None, max_dist
-            for i, c in enumerate(cands):
-                if i in used:
-                    continue
-                cx, cy = centroid(c)
-                d = math.hypot(cx - lx, cy - ly)
-                if d < best_dist:
-                    best, best_dist = i, d
-            if best is not None:
-                track["points"].append((f, cands[best]))
-                track["last_frame"] = f
-                used.add(best)
-
-        still_active = []
-        for track in active:
-            if f - track["last_frame"] > max_gap:
-                finished.append(track)
-            else:
-                still_active.append(track)
-        active = still_active
-
-        for i, c in enumerate(cands):
-            if i not in used:
-                active.append({"points": [(f, c)], "last_frame": f})
-
-    finished.extend(active)
-    return finished
-
-
-def summarize_track(track: dict, track_id: int, frame_height: int, bottom_margin: int, growth_thresh: float, min_circularity: float):
-    points = track["points"]
-    frames = [p[0] for p in points]
-    first_c, last_c = points[0][1], points[-1][1]
-    area0, area1 = first_c["area_px"], last_c["area_px"]
-    y0 = centroid(first_c)[1]
-    y1 = centroid(last_c)[1]
-    exits_bottom = last_c["bbox_y1"] >= frame_height - 1 - bottom_margin
-    growth = area1 / area0 if area0 > 0 else float("nan")
-    mean_circularity = float(np.mean([p[1]["circularity"] for p in points]))
-    # circularity 낮음(=길쭉하게 퍼진 모양) -> 도색 차선(자전거도로/속도표시) 페인트일 가능성이 높음(실측으로 확인).
-    # 높음(=뭉친/원형에 가까움) -> 국소적인 지점형 이상일 가능성. min_circularity도 아직 미검증 시작값.
-    likely_ground_fixed = (
-        len(points) >= 3 and growth >= growth_thresh and exits_bottom and y1 > y0
-        and mean_circularity >= min_circularity
-    )
-    return {
-        "track_id": track_id,
-        "n_frames": len(points),
-        "start_frame": frames[0],
-        "end_frame": frames[-1],
-        "area_start": area0,
-        "area_end": area1,
-        "mean_circularity": round(mean_circularity, 3),
-        "area_growth_ratio": round(growth, 3) if not math.isnan(growth) else "",
-        "y_center_start": round(y0, 1),
-        "y_center_end": round(y1, 1),
-        "moved_down": y1 > y0,
-        "exits_bottom": exits_bottom,
-        "mean_peak_temp_c": round(float(np.mean([p[1]["peak_temp_c"] for p in points])), 2),
-        "likely_ground_fixed": likely_ground_fixed,
-    }
 
 
 def track_candidates(session_dir: Path, max_dist: float, max_gap: int, bottom_margin: int,

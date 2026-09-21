@@ -59,5 +59,8 @@ EfficientAD/ckptMedium/
 *.DS_Store
 *.log
 
+# prototype
+hp-prototype/
+
 # claude
 .claude/
