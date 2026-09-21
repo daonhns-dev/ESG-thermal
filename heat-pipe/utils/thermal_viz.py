@@ -24,11 +24,20 @@ def imwrite_unicode(path: Path, img: np.ndarray, ext: str, params: Optional[list
     return True
 
 
-def colorize(frame_c: np.ndarray, lo: Optional[float] = None, hi: Optional[float] = None) -> np.ndarray:
-    """섭씨 온도 배열 -> JET 컬러맵 BGR 이미지. lo/hi 안 주면 프레임 자체 min/max로 정규화."""
+def _normalize_u8(frame_c: np.ndarray, lo: Optional[float], hi: Optional[float]) -> np.ndarray:
     if lo is None:
         lo = float(frame_c.min())
     if hi is None:
         hi = float(frame_c.max())
     norm = np.clip((frame_c - lo) / max(hi - lo, 1e-6), 0, 1)
-    return cv2.applyColorMap((norm * 255).astype(np.uint8), cv2.COLORMAP_JET)
+    return (norm * 255).astype(np.uint8)
+
+
+def colorize(frame_c: np.ndarray, lo: Optional[float] = None, hi: Optional[float] = None) -> np.ndarray:
+    """섭씨 온도 배열 -> JET 컬러맵 BGR 이미지. lo/hi 안 주면 프레임 자체 min/max로 정규화."""
+    return cv2.applyColorMap(_normalize_u8(frame_c, lo, hi), cv2.COLORMAP_JET)
+
+
+def to_grayscale(frame_c: np.ndarray, lo: Optional[float] = None, hi: Optional[float] = None) -> np.ndarray:
+    """섭씨 온도 배열 -> 그레이스케일 BGR 이미지(3채널, VideoWriter 호환용). lo/hi 안 주면 프레임 자체 min/max로 정규화."""
+    return cv2.cvtColor(_normalize_u8(frame_c, lo, hi), cv2.COLOR_GRAY2BGR)
