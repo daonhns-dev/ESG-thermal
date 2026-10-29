@@ -38,6 +38,17 @@ def read_csv(path: Path) -> list[dict[str, Any]]:
         return list(csv.DictReader(f))
 
 
+def read_excluded_case_ids(paths: list[Path]) -> set[str]:
+    """Read case IDs that must not be selected for another labeling queue."""
+    excluded: set[str] = set()
+    for path in paths:
+        for row in read_csv(path):
+            case_id = str(row.get("case_id", "")).strip()
+            if case_id:
+                excluded.add(case_id)
+    return excluded
+
+
 def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", newline="", encoding="utf-8") as f:
@@ -314,6 +325,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--per-bucket", type=int, default=8)
     parser.add_argument("--case-iou-thresh", type=float, default=0.25)
     parser.add_argument("--max-rep-frame-gap", type=int, default=8)
+    parser.add_argument(
+        "--exclude-case-csv",
+        type=Path,
+        nargs="*",
+        default=[],
+        help="CSV files whose case_id values must be excluded from this label queue.",
+    )
     parser.add_argument("--panel-count", type=int, default=None, help="Number of selected cases to draw. Defaults to target-count.")
     parser.add_argument("--panel-pad", type=int, default=24)
     parser.add_argument("--panel-scale", type=int, default=3)
@@ -333,7 +351,9 @@ def main() -> None:
 
     cases = merge_cases(all_rows, args.case_iou_thresh, args.max_rep_frame_gap)
     case_rows = [summarize_case(case, f"C{idx + 1:04d}") for idx, case in enumerate(cases)]
-    selected = sample_cases(case_rows, args.target_count, args.per_bucket)
+    excluded_case_ids = read_excluded_case_ids(args.exclude_case_csv)
+    eligible_case_rows = [row for row in case_rows if row["case_id"] not in excluded_case_ids]
+    selected = sample_cases(eligible_case_rows, args.target_count, args.per_bucket)
 
     cases_csv = output_dir / "merged_cases.csv"
     label_csv = output_dir / "label_candidates.csv"
@@ -349,6 +369,8 @@ def main() -> None:
     print("Label candidate export saved")
     print(f"  input tracks: {len(all_rows)}")
     print(f"  merged cases: {len(case_rows)}")
+    print(f"  excluded labeled cases: {len(excluded_case_ids)}")
+    print(f"  eligible cases: {len(eligible_case_rows)}")
     print(f"  selected label candidates: {len(selected)}")
     print(f"  likely_ground_fixed tracks: {likely_count}")
     print(f"  merged cases: {cases_csv}")

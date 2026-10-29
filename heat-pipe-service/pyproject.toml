@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "heatpipe-service"
+version = "0.1.0"
+description = "DaonH&S district-heating thermal anomaly and GIS service"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy>=1.24",
+  "scipy>=1.11",
+  "opencv-python>=4.8",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7.4", "jsonschema>=4.20"]
+
+[project.scripts]
+heatpipe-batch = "heatpipe_service.jobs.batch:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
