@@ -1,8 +1,14 @@
 # DaonH&S 연동 INT-001~005 개발 범위
 
+> **과거 초안 — 구현 기준으로 사용하지 않음**
+>
+> 2026-10-30 VTI 주간회의 결과 INT-002·005와 GIS/SHP·관로 매칭은
+> DaonH&S 제공 범위에서 제외되었다. 현재 기준 문서는
+> [`heat-pipe-service/docs/INT_001_003_004_DEVELOPMENT_SCOPE.md`](../../heat-pipe-service/docs/INT_001_003_004_DEVELOPMENT_SCOPE.md)다.
+
 - 정리일: 2026-10-29
 - 목적: VTI 시스템과 DaonH&S 이상징후 분석·GIS 시스템의 연동 개발 범위 정의
-- 상태: 구현 기준 초안
+- 상태: 대체된 과거 초안
 
 ## 1. 전체 처리 흐름
 

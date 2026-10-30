@@ -14,12 +14,18 @@
 7. 원본 해상도 열화상에 2×3 격자와 후보 영역을 렌더링한 PNG를 생성한다.
 8. `analysis_result.json`, `analysis_candidates.csv`, 후보 PNG를 출력한다.
 
+입력 검증 또는 분석 중 실패하면 프로세스는 실패 종료 코드를 반환하면서도
+`status=FAILED`, `success=false`, 공통 오류 객체를 포함한
+`analysis_result.json`을 남긴다. 실패 결과의 `processing`은 `null`이고 후보는
+빈 배열이다.
+
 ## 결과 파일
 
 - 정식 결과: `analysis_result.json`
 - 선행 기술실증·검토용: `analysis_candidates.csv`
 - 후보 이미지: `images/{monitoringDataId}_{candidateId}_f{frame}.png`
 - JSON Schema: `schemas/analysis-result-v0.schema.json`
+- 협의용 예시: `examples/analysis-result-v0.example.json`
 
 ## v0 주요 필드
 

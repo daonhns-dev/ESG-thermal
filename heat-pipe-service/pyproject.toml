@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "heatpipe-service"
 version = "0.1.0"
-description = "DaonH&S district-heating thermal anomaly and GIS service"
+description = "DaonH&S district-heating thermal anomaly analysis service"
 requires-python = ">=3.11"
 dependencies = [
   "numpy>=1.24",

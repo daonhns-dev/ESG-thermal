@@ -1,0 +1,99 @@
+{
+  "schema_version": "0.1.0",
+  "job_id": "JOB-20261030-000001",
+  "monitoring_data_id": "20260813_132634",
+  "status": "SUCCEEDED",
+  "success": true,
+  "completed_at": "2026-10-30T01:00:00Z",
+  "processing": {
+    "input": {
+      "att_file_name": "20260813_132634.att",
+      "atg_file_name": "20260813_132634.atg"
+    },
+    "frame_range": {
+      "start": 0,
+      "end_exclusive": 3959,
+      "stride": 1,
+      "total_att_frames": 3959,
+      "total_atg_records": 3885,
+      "processed_frame_count": 3959
+    },
+    "analysis_roi": {
+      "x": 0,
+      "y": 158,
+      "width": 384,
+      "height": 130
+    },
+    "algorithms": [
+      "robust_zscore",
+      "multiscale_top_hat",
+      "percentile_contrast"
+    ],
+    "parameters": {
+      "score_threshold": 3.0,
+      "min_area_px": 20,
+      "min_track_frames": 3,
+      "merge_iou_threshold": 0.35
+    },
+    "elapsed_seconds": 125.42
+  },
+  "candidate_count": 1,
+  "candidates": [
+    {
+      "candidate_id": "JOB-20261030-000001-CAND-0001",
+      "rank": 1,
+      "representative_frame": 120,
+      "captured_at": "2026-08-13T13:29:54+09:00",
+      "gps": {
+        "latitude": 37.5761,
+        "longitude": 126.8170
+      },
+      "analysis_roi": {
+        "x": 0,
+        "y": 158,
+        "width": 384,
+        "height": 130
+      },
+      "candidate_bbox": {
+        "x": 149,
+        "y": 183,
+        "width": 32,
+        "height": 15
+      },
+      "temperature_c": {
+        "minimum": 36.44,
+        "mean": 45.47,
+        "maximum": 68.27,
+        "background_median": 45.91,
+        "delta_from_background": 22.36
+      },
+      "evidence": {
+        "algorithms": [
+          "multiscale_top_hat",
+          "percentile_contrast"
+        ],
+        "max_anomaly_score": 51.1191,
+        "mean_anomaly_score": 10.4065,
+        "persistence_score": 67.378,
+        "tracked_frame_count": 10,
+        "track_start_frame": 115,
+        "track_end_frame": 124,
+        "likely_ground_fixed": false
+      },
+      "result_image": {
+        "format": "PNG",
+        "width": 384,
+        "height": 288,
+        "path": "images/20260813_132634_JOB-20261030-000001-CAND-0001_f000120.png",
+        "grid": {"rows": 2, "columns": 3}
+      }
+    }
+  ],
+  "warnings": [
+    {
+      "code": "ATT_ATG_COUNT_MISMATCH",
+      "message": "ATT frames (3959) and ATG records (3885) differ; unmatched candidate metadata is null."
+    }
+  ],
+  "error": null
+}

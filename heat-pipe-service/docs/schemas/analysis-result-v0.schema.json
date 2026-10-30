@@ -6,6 +6,7 @@
   "additionalProperties": false,
   "required": [
     "schema_version",
+    "job_id",
     "monitoring_data_id",
     "status",
     "success",
@@ -18,11 +19,17 @@
   ],
   "properties": {
     "schema_version": { "const": "0.1.0" },
+    "job_id":{"type": "string", "pattern": "^JOB-[0-9]{8}-[0-9]{6}$"},
     "monitoring_data_id": { "type": "string", "minLength": 1 },
     "status": { "enum": ["SUCCEEDED", "FAILED"] },
     "success": { "type": "boolean" },
     "completed_at": { "type": "string", "format": "date-time" },
-    "processing": { "$ref": "#/$defs/processing" },
+    "processing": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/processing" }
+      ]
+    },
     "candidate_count": { "type": "integer", "minimum": 0 },
     "candidates": {
       "type": "array",
@@ -45,6 +52,7 @@
       "then": {
         "properties": {
           "status": { "const": "SUCCEEDED" },
+          "processing": { "$ref": "#/$defs/processing" },
           "error": { "type": "null" }
         }
       }
@@ -54,6 +62,9 @@
       "then": {
         "properties": {
           "status": { "const": "FAILED" },
+          "processing": { "type": "null" },
+          "candidate_count": { "const": 0 },
+          "candidates": { "maxItems": 0 },
           "error": { "$ref": "#/$defs/message" }
         }
       }
@@ -131,10 +142,10 @@
         "analysis_roi", "candidate_bbox", "temperature_c", "evidence", "result_image"
       ],
       "properties": {
-        "candidate_id": { "type": "string", "pattern": "^CAND-[0-9]{4}$" },
+        "candidate_id": { "type": "string", "pattern": "^JOB-[0-9]{8}-[0-9]{6}-CAND-[0-9]{4}$" },
         "rank": { "type": "integer", "minimum": 1 },
         "representative_frame": { "type": "integer", "minimum": 0 },
-        "captured_at": { "type": ["string", "null"] },
+        "captured_at": {"oneOf":[{"type":"string", "format": "date-time"}, {"type": "null"}]},
         "gps": {
           "oneOf": [
             { "type": "null" },

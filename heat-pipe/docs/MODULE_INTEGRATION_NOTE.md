@@ -2,9 +2,11 @@
 
 - 정리일: 2026-10-03
 - 목적: 외주 개발 시스템과 이상징후 탐지 모듈의 연계 협의 및 추후 모듈 개발 기준
-- 상태: 1차 협의안
+- 상태: 과거 1차 협의안 — 입출력 배경자료로만 사용
 
-INT-001~005 전체 개발 범위와 API 제안은 [`INT_001_005_DEVELOPMENT_SCOPE.md`](INT_001_005_DEVELOPMENT_SCOPE.md)를 기준 문서로 사용한다.
+2026-10-30 VTI 주간회의 결과 INT-002·005와 GIS/SHP·관로 매칭은 DaonH&S
+범위에서 제외되었다. 현재 개발 범위와 API 기준은
+[`heat-pipe-service/docs/INT_001_003_004_DEVELOPMENT_SCOPE.md`](../../heat-pipe-service/docs/INT_001_003_004_DEVELOPMENT_SCOPE.md)를 사용한다.
 
 ## 1. 데이터 연계 방식
 

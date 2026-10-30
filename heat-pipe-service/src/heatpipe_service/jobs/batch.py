@@ -7,8 +7,9 @@ import csv
 import json
 import math
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Any
 
@@ -28,10 +29,15 @@ from heatpipe_service.analysis.roi import Roi, clip_roi, default_analysis_roi
 from heatpipe_service.analysis.tracking import build_tracks, summarize_track
 
 SCHEMA_VERSION = "0.1.0"
+KST = ZoneInfo("Asia/Seoul")
 
+def format_captured_at(timestamp: str) -> str:
+    captured = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
+    return captured.replace(tzinfo=KST).isoformat()
 
 @dataclass(frozen=True)
 class BatchRequest:
+    job_id: str
     monitoring_data_id: str
     att_path: Path
     atg_path: Path
@@ -66,6 +72,7 @@ class BatchArtifacts:
     result_json: Path
     candidates_csv: Path
     image_paths: tuple[Path, ...] = field(default_factory=tuple)
+    success: bool = True
 
 
 def run_batch(request: BatchRequest, config: BatchConfig | None = None) -> BatchArtifacts:
@@ -117,7 +124,7 @@ def run_batch(request: BatchRequest, config: BatchConfig | None = None) -> Batch
     result_candidates: list[dict[str, Any]] = []
     image_paths: list[Path] = []
     for rank, item in enumerate(selected_tracks, start=1):
-        candidate_id = f"CAND-{rank:04d}"
+        candidate_id = f"{request.job_id}-CAND-{rank:04d}"
         candidate, image_path = _materialize_candidate(
             request,
             header,
@@ -136,6 +143,7 @@ def run_batch(request: BatchRequest, config: BatchConfig | None = None) -> Batch
     completed_at = _utc_now()
     payload = {
         "schema_version": SCHEMA_VERSION,
+        "job_id": request.job_id,
         "monitoring_data_id": request.monitoring_data_id,
         "status": "SUCCEEDED",
         "success": True,
@@ -179,6 +187,39 @@ def run_batch(request: BatchRequest, config: BatchConfig | None = None) -> Batch
     return BatchArtifacts(result_json, candidates_csv, tuple(image_paths))
 
 
+def run_batch_safely(request: BatchRequest, config: BatchConfig | None = None) -> BatchArtifacts:
+    """Run a batch and persist a schema-valid FAILED result for operational errors."""
+    try:
+        return run_batch(request, config)
+    except Exception as error:
+        output_dir = Path(request.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        result_json = output_dir / "analysis_result.json"
+        candidates_csv = output_dir / "analysis_candidates.csv"
+        payload = {
+            "schema_version": SCHEMA_VERSION,
+            "job_id": request.job_id,
+            "monitoring_data_id": request.monitoring_data_id,
+            "status": "FAILED",
+            "success": False,
+            "completed_at": _utc_now(),
+            "processing": None,
+            "candidate_count": 0,
+            "candidates": [],
+            "warnings": [],
+            "error": {
+                "code": _error_code(error),
+                "message": str(error) or error.__class__.__name__,
+            },
+        }
+        result_json.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False),
+            encoding="utf-8",
+        )
+        _write_candidates_csv(candidates_csv, [])
+        return BatchArtifacts(result_json, candidates_csv, success=False)
+
+
 def _validate_request(request: BatchRequest, config: BatchConfig) -> None:
     if not request.monitoring_data_id.strip():
         raise ValueError("monitoring_data_id must not be empty")
@@ -214,11 +255,7 @@ def _resolve_frame_range(request: BatchRequest, total_frames: int) -> tuple[int,
     return request.frame_start, end
 
 
-def _frame_candidates(
-    frame_c: np.ndarray,
-    roi: Roi,
-    config: BatchConfig,
-) -> list[dict[str, Any]]:
+def _frame_candidates(frame_c: np.ndarray, roi: Roi, config: BatchConfig,) -> list[dict[str, Any]]:
     x0, y0, x1, y1 = roi
     roi_frame = frame_c[y0:y1, x0:x1]
     rows: list[dict[str, Any]] = []
@@ -239,9 +276,7 @@ def _frame_candidates(
     return _merge_candidates(rows, config.merge_iou_threshold)
 
 
-def _merge_candidates(
-    candidates: list[dict[str, Any]], iou_threshold: float
-) -> list[dict[str, Any]]:
+def _merge_candidates(candidates: list[dict[str, Any]], iou_threshold: float) -> list[dict[str, Any]]:
     merged: list[dict[str, Any]] = []
     for candidate in sorted(candidates, key=lambda row: float(row["max_score"]), reverse=True):
         match = next(
@@ -273,9 +308,7 @@ def _bbox_iou(a: dict[str, Any], b: dict[str, Any]) -> float:
     return intersection / union if union else 0.0
 
 
-def _rank_tracks(
-    tracks: list[dict[str, Any]], frame_height: int, config: BatchConfig
-) -> list[dict[str, Any]]:
+def _rank_tracks(tracks: list[dict[str, Any]], frame_height: int, config: BatchConfig) -> list[dict[str, Any]]:
     ranked: list[dict[str, Any]] = []
     for track_id, track in enumerate(tracks):
         summary = summarize_track(
@@ -351,7 +384,7 @@ def _materialize_candidate(
             "candidate_id": candidate_id,
             "rank": rank,
             "representative_frame": frame_index,
-            "captured_at": atg.timestamp if atg else None,
+            "captured_at": format_captured_at(atg.timestamp) if atg else None,
             "gps": {"latitude": atg.lat, "longitude": atg.lon} if atg else None,
             "analysis_roi": _roi_json(analysis_roi),
             "candidate_bbox": _bbox_json(bbox),
@@ -431,6 +464,16 @@ def _data_warnings(att_frames: int, atg_records: int, empty_frames: int) -> list
     return warnings
 
 
+def _error_code(error: Exception) -> str:
+    if isinstance(error, FileNotFoundError):
+        return "INPUT_FILE_NOT_FOUND"
+    if isinstance(error, ValueError):
+        return "INVALID_ANALYSIS_REQUEST"
+    if isinstance(error, OSError):
+        return "INPUT_OUTPUT_ERROR"
+    return "ANALYSIS_FAILED"
+
+
 def _write_candidates_csv(path: Path, candidates: list[dict[str, Any]]) -> None:
     fields = [
         "candidate_id",
@@ -486,6 +529,7 @@ def _utc_now() -> str:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--monitoring-data-id", required=True)
+    parser.add_argument("--job-id", required=True)
     parser.add_argument("--att", type=Path, required=True)
     parser.add_argument("--atg", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
@@ -501,6 +545,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     args = build_parser().parse_args()
     request = BatchRequest(
+        job_id=args.job_id,
         monitoring_data_id=args.monitoring_data_id,
         att_path=args.att,
         atg_path=args.atg,
@@ -514,8 +559,10 @@ def main() -> None:
         min_track_frames=args.min_track_frames,
         max_results=args.max_results,
     )
-    artifacts = run_batch(request, config)
+    artifacts = run_batch_safely(request, config)
     print(artifacts.result_json)
+    if not artifacts.success:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
