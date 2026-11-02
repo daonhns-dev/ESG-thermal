@@ -25,6 +25,23 @@ def default_analysis_roi(shape: tuple[int, int], top_frac: float) -> Roi:
     return 0, int(height * top_frac), width, height
 
 
+def grid_cell_roi(
+    shape: tuple[int, int], rows: int, columns: int, row: int, column: int
+) -> Roi:
+    """Return one zero-based cell of a grid covering the full frame."""
+    if rows <= 0 or columns <= 0:
+        raise ValueError("grid dimensions must be positive")
+    if not 0 <= row < rows or not 0 <= column < columns:
+        raise ValueError("grid cell is outside the frame")
+    height, width = shape
+    return (
+        int(round(width * column / columns)),
+        int(round(height * row / rows)),
+        int(round(width * (column + 1) / columns)),
+        int(round(height * (row + 1) / rows)),
+    )
+
+
 def grid_roi(shape: tuple[int, int], top_frac: float, count: int, index: int) -> Roi:
     if count <= 0:
         raise ValueError("roi grid count must be positive")

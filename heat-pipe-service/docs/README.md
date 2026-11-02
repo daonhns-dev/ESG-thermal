@@ -13,6 +13,17 @@
 | [`schemas/analysis-result-v0.schema.json`](schemas/analysis-result-v0.schema.json) | 내부 검토용 v0 | 분석 결과 JSON Schema |
 | [`examples/analysis-result-v0.example.json`](examples/analysis-result-v0.example.json) | 협의용 예시 | VTI·PM 검토용 성공 결과 예시 |
 | [`CORE_MIGRATION.md`](CORE_MIGRATION.md) | 완료 기록 | PoC 이상탐지 코어 이관 및 검증 내역 |
+| [`openapi.json`](openapi.json) | 현재 Mock API 출력 사본 | 서버의 `/openapi.json`에서 생성되는 OpenAPI 명세 |
+| [`JOB_STATE_V0.md`](JOB_STATE_V0.md) | 내부 구현안 | SQLite 작업 상태·진행률·재시도 정책 |
+| [`STORAGE_WORKER_V0.md`](STORAGE_WORKER_V0.md) | 내부 구현안 | 로컬·MinIO 저장소와 단일 작업 실행기 운영 |
+| [`REAL_DATA_SMOKE_2026-11-02.md`](REAL_DATA_SMOKE_2026-11-02.md) | 검증 기록 | 실제 ATT·ATG 30프레임 단일 작업 결과 |
+| [`REAL_DATA_FULL_2026-11-02.md`](REAL_DATA_FULL_2026-11-02.md) | 검증 기록 | 실제 ATT·ATG 전체 3,959프레임 배치 결과 |
+| [`REAL_DATA_CENTER_ROI_2026-11-02.md`](REAL_DATA_CENTER_ROI_2026-11-02.md) | 검증 기록 | 하단 가운데 ROI로 전체 3,959프레임 재분석 |
+| [`ROI_TEMPERATURE_FULL_2026-11-02.md`](ROI_TEMPERATURE_FULL_2026-11-02.md) | 검증 기록 | 대표 프레임 ROI 온도 통계 포함 전체 프레임 결과 |
+| [`Q15_VTI_INTEGRATION_API_DRAFT.md`](Q15_VTI_INTEGRATION_API_DRAFT.md) | VTI 협의용 초안 | Q15 연동 흐름·요청/응답·인증·오류·미확정 정책 |
+| [`VTI_INTEGRATION_TEST_CHECKLIST.md`](VTI_INTEGRATION_TEST_CHECKLIST.md) | 시험 준비 목록 | 연동 시험 전 완료·합의·검증할 항목 |
+
+INT-001·003·004의 제안 요청·응답 모델과 OpenAPI는 `src/heatpipe_service/api`에 구현되어 있다. 실행 방법은 [프로젝트 README](../README.md#api-및-openapi)를 참고한다. SQLite 작업 상태, 로컬·선택적 MinIO 저장소와 별도 작업 실행기, 완료 작업의 JSON·PNG 조회, Bearer 인증이 구현되어 있다.
 
 ## 문서 변경 원칙
 

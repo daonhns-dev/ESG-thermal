@@ -5,4 +5,8 @@ __pycache__/
 htmlcov/
 *.egg-info/
 .venv/
+output/
+tmp/
+.env
+*.sqlite3
 

@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 
@@ -25,7 +25,7 @@ from heatpipe_service.analysis.io import (
     read_att_header,
 )
 from heatpipe_service.analysis.rendering import draw_result_image, imwrite_unicode
-from heatpipe_service.analysis.roi import Roi, clip_roi, default_analysis_roi
+from heatpipe_service.analysis.roi import Roi, clip_roi, grid_cell_roi
 from heatpipe_service.analysis.tracking import build_tracks, summarize_track
 
 SCHEMA_VERSION = "0.1.0"
@@ -50,7 +50,6 @@ class BatchRequest:
 @dataclass(frozen=True)
 class BatchConfig:
     algorithms: tuple[str, ...] = V0_CANDIDATE_ALGORITHMS
-    road_top_fraction: float = 0.55
     frame_stride: int = 1
     score_threshold: float = 3.0
     min_area: int = 20
@@ -75,19 +74,46 @@ class BatchArtifacts:
     success: bool = True
 
 
-def run_batch(request: BatchRequest, config: BatchConfig | None = None) -> BatchArtifacts:
+@dataclass(frozen=True)
+class BatchProgress:
+    status: str
+    progress_percent: int
+    processed_frame_count: int
+    total_frame_count: int | None
+    message: str
+    error_code: str | None = None
+
+
+ProgressCallback = Callable[[BatchProgress], None]
+
+
+def run_batch(
+    request: BatchRequest,
+    config: BatchConfig | None = None,
+    on_progress: ProgressCallback | None = None,
+) -> BatchArtifacts:
     """Execute one monitoring-data analysis and materialize all local artifacts."""
     config = config or BatchConfig()
     started = time.perf_counter()
+    if on_progress:
+        on_progress(BatchProgress("VALIDATING", 1, 0, None, "Validating ATT/ATG input"))
     _validate_request(request, config)
 
     header = read_att_header(request.att_path)
     total_frames = att_frame_count(request.att_path, header)
     atg_records = read_atg(request.atg_path)
     frame_start, frame_end = _resolve_frame_range(request, total_frames)
-    requested_roi = request.analysis_roi or default_analysis_roi(
-        (header.height, header.width), config.road_top_fraction
+    selected_frame_count = len(range(frame_start, frame_end, config.frame_stride))
+    default_roi = grid_cell_roi(
+        (header.height, header.width), config.display_grid_rows,
+        config.display_grid_columns, config.display_grid_rows - 1,
+        (config.display_grid_columns - 1) // 2,
     )
+    requested_roi = request.analysis_roi or default_roi
+    if (requested_roi[0] < default_roi[0] or requested_roi[1] < default_roi[1]
+            or requested_roi[2] > default_roi[2] or requested_roi[3] > default_roi[3]
+            or requested_roi[2] <= requested_roi[0] or requested_roi[3] <= requested_roi[1]):
+        raise ValueError("analysis_roi must be within the bottom-center grid cell")
     analysis_roi = clip_roi((header.height, header.width), requested_roi)
 
     output_dir = Path(request.output_dir)
@@ -97,15 +123,23 @@ def run_batch(request: BatchRequest, config: BatchConfig | None = None) -> Batch
     by_frame: dict[int, list[dict[str, Any]]] = {}
     processed_frames: list[int] = []
     empty_frames = 0
-    for frame_index in range(frame_start, frame_end, config.frame_stride):
+    if on_progress:
+        on_progress(BatchProgress("ANALYZING", 10, 0, selected_frame_count, "Analyzing thermal frames"))
+    for examined_count, frame_index in enumerate(range(frame_start, frame_end, config.frame_stride), start=1):
         frame_c = read_att_frame_celsius(request.att_path, frame_index, header)
         if not np.isfinite(frame_c).all() or float(np.max(frame_c)) <= 0:
             empty_frames += 1
-            continue
-        processed_frames.append(frame_index)
-        candidates = _frame_candidates(frame_c, analysis_roi, config)
-        if candidates:
-            by_frame[frame_index] = candidates
+        else:
+            processed_frames.append(frame_index)
+            candidates = _frame_candidates(frame_c, analysis_roi, config)
+            if candidates:
+                by_frame[frame_index] = candidates
+        if on_progress:
+            on_progress(BatchProgress(
+                "ANALYZING", 10 + 75 * examined_count // selected_frame_count,
+                len(processed_frames), selected_frame_count,
+                f"Examined {examined_count} of {selected_frame_count} frames",
+            ))
 
     tracks = build_tracks(
         by_frame,
@@ -123,6 +157,8 @@ def run_batch(request: BatchRequest, config: BatchConfig | None = None) -> Batch
 
     result_candidates: list[dict[str, Any]] = []
     image_paths: list[Path] = []
+    if on_progress:
+        on_progress(BatchProgress("RENDERING", 90, len(processed_frames), selected_frame_count, "Rendering result images"))
     for rank, item in enumerate(selected_tracks, start=1):
         candidate_id = f"{request.job_id}-CAND-{rank:04d}"
         candidate, image_path = _materialize_candidate(
@@ -184,13 +220,27 @@ def run_batch(request: BatchRequest, config: BatchConfig | None = None) -> Batch
         encoding="utf-8",
     )
     _write_candidates_csv(candidates_csv, result_candidates)
+    if on_progress:
+        on_progress(BatchProgress("SUCCEEDED", 100, len(processed_frames), selected_frame_count, "Analysis complete"))
     return BatchArtifacts(result_json, candidates_csv, tuple(image_paths))
 
 
-def run_batch_safely(request: BatchRequest, config: BatchConfig | None = None) -> BatchArtifacts:
+def run_batch_safely(
+    request: BatchRequest,
+    config: BatchConfig | None = None,
+    on_progress: ProgressCallback | None = None,
+) -> BatchArtifacts:
     """Run a batch and persist a schema-valid FAILED result for operational errors."""
+    last_progress: BatchProgress | None = None
+
+    def report(update: BatchProgress) -> None:
+        nonlocal last_progress
+        if on_progress:
+            on_progress(update)
+        last_progress = update
+
     try:
-        return run_batch(request, config)
+        return run_batch(request, config, report if on_progress else None)
     except Exception as error:
         output_dir = Path(request.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -217,6 +267,14 @@ def run_batch_safely(request: BatchRequest, config: BatchConfig | None = None) -
             encoding="utf-8",
         )
         _write_candidates_csv(candidates_csv, [])
+        if on_progress:
+            on_progress(BatchProgress(
+                "FAILED", last_progress.progress_percent if last_progress else 0,
+                last_progress.processed_frame_count if last_progress else 0,
+                last_progress.total_frame_count if last_progress else None,
+                str(error) or error.__class__.__name__,
+                error_code=_error_code(error),
+            ))
         return BatchArtifacts(result_json, candidates_csv, success=False)
 
 
@@ -362,6 +420,7 @@ def _materialize_candidate(
     )
     frame_c = read_att_frame_celsius(request.att_path, frame_index, header)
     temperature = _temperature_stats(frame_c, bbox)
+    roi_temperature = _roi_temperature_stats(frame_c, analysis_roi)
     image_name = f"{request.monitoring_data_id}_{candidate_id}_f{frame_index:06d}.png"
     image_path = image_dir / image_name
     rendered = draw_result_image(
@@ -370,6 +429,7 @@ def _materialize_candidate(
         candidate_id,
         config.display_grid_rows,
         config.display_grid_columns,
+        analysis_roi=analysis_roi,
     )
     if not imwrite_unicode(image_path, rendered, ".png"):
         raise OSError(f"failed to write result image: {image_path}")
@@ -389,6 +449,7 @@ def _materialize_candidate(
             "analysis_roi": _roi_json(analysis_roi),
             "candidate_bbox": _bbox_json(bbox),
             "temperature_c": temperature,
+            "roi_temperature_c": roi_temperature,
             "evidence": {
                 "algorithms": algorithms,
                 "max_anomaly_score": round(float(representative["max_score"]), 4),
@@ -432,6 +493,21 @@ def _temperature_stats(frame_c: np.ndarray, bbox: tuple[int, int, int, int]) -> 
         "maximum": round(peak, 2),
         "background_median": round(background_median, 2),
         "delta_from_background": round(peak - background_median, 2),
+    }
+
+
+def _roi_temperature_stats(frame_c: np.ndarray, roi: Roi) -> dict[str, float]:
+    x0, y0, x1, y1 = roi
+    pixels = frame_c[y0:y1, x0:x1]
+    minimum = round(float(np.min(pixels)), 2)
+    mean = round(float(np.mean(pixels)), 2)
+    maximum = round(float(np.max(pixels)), 2)
+    return {
+        "minimum": minimum,
+        "mean": mean,
+        "maximum": maximum,
+        "max_minus_min": round(maximum - minimum, 2),
+        "max_minus_mean": round(maximum - mean, 2),
     }
 
 

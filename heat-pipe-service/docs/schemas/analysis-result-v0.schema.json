@@ -82,6 +82,18 @@
         "height": { "type": "integer", "minimum": 1 }
       }
     },
+    "roi_temperature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minimum", "mean", "maximum", "max_minus_min", "max_minus_mean"],
+      "properties": {
+        "minimum": { "type": "number" },
+        "mean": { "type": "number" },
+        "maximum": { "type": "number" },
+        "max_minus_min": { "type": "number" },
+        "max_minus_mean": { "type": "number" }
+      }
+    },
     "message": {
       "type": "object",
       "additionalProperties": false,
@@ -173,6 +185,12 @@
             "background_median": { "type": "number" },
             "delta_from_background": { "type": "number" }
           }
+        },
+        "roi_temperature_c": {
+          "oneOf": [
+            { "$ref": "#/$defs/roi_temperature" },
+            { "type": "null" }
+          ]
         },
         "evidence": {
           "type": "object",

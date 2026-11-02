@@ -1,0 +1,1304 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Heat Pipe Service API",
+    "description": "Proposed INT-001/003/004 contract. The worker produces results; INT-001 returns JSON and candidate PNG URLs served by this API.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "Service"
+        ],
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/version": {
+      "get": {
+        "tags": [
+          "Service"
+        ],
+        "summary": "Version",
+        "operationId": "version_version_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analysis-jobs": {
+      "post": {
+        "tags": [
+          "INT-003"
+        ],
+        "summary": "Request thermal analysis",
+        "operationId": "create_job_api_v1_analysis_jobs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateJobRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateJobResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "VtiBearerApiKey": []
+          }
+        ]
+      }
+    },
+    "/api/v1/analysis-jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "INT-004"
+        ],
+        "summary": "Get analysis job status",
+        "operationId": "get_job_api_v1_analysis_jobs__job_id__get",
+        "security": [
+          {
+            "VtiBearerApiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analysis-jobs/{job_id}/results": {
+      "get": {
+        "tags": [
+          "INT-001"
+        ],
+        "summary": "Get completed analysis result",
+        "operationId": "get_results_api_v1_analysis_jobs__job_id__results_get",
+        "security": [
+          {
+            "VtiBearerApiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisResultResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analysis-jobs/{job_id}/images/{candidate_id}": {
+      "get": {
+        "tags": [
+          "INT-001"
+        ],
+        "summary": "Get a candidate result PNG",
+        "operationId": "get_image_api_v1_analysis_jobs__job_id__images__candidate_id__get",
+        "security": [
+          {
+            "VtiBearerApiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "candidate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Candidate Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "image/png": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "image/png": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "image/png": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "503": {
+            "content": {
+              "image/png": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AnalysisParameters": {
+        "properties": {
+          "score_threshold": {
+            "type": "number",
+            "title": "Score Threshold"
+          },
+          "min_area_px": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Min Area Px"
+          },
+          "min_track_frames": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Min Track Frames"
+          },
+          "merge_iou_threshold": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Merge Iou Threshold"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "score_threshold",
+          "min_area_px",
+          "min_track_frames",
+          "merge_iou_threshold"
+        ],
+        "title": "AnalysisParameters"
+      },
+      "AnalysisResultResponse": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "const": "0.1.0",
+            "title": "Schema Version"
+          },
+          "job_id": {
+            "type": "string",
+            "pattern": "^JOB-[0-9]{8}-[0-9]{6}$",
+            "title": "Job Id"
+          },
+          "monitoring_data_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Monitoring Data Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SUCCEEDED",
+              "FAILED"
+            ],
+            "title": "Status"
+          },
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Completed At"
+          },
+          "processing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Processing"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidate_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Candidate Count"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/Candidate"
+            },
+            "type": "array",
+            "title": "Candidates"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/Message"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Message"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "schema_version",
+          "job_id",
+          "monitoring_data_id",
+          "status",
+          "success",
+          "completed_at",
+          "processing",
+          "candidate_count",
+          "candidates",
+          "warnings",
+          "error"
+        ],
+        "title": "AnalysisResultResponse"
+      },
+      "Candidate": {
+        "properties": {
+          "candidate_id": {
+            "type": "string",
+            "pattern": "^JOB-[0-9]{8}-[0-9]{6}-CAND-[0-9]{4}$",
+            "title": "Candidate Id"
+          },
+          "rank": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Rank"
+          },
+          "representative_frame": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Representative Frame"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "gps": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Gps"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "analysis_roi": {
+            "$ref": "#/components/schemas/Roi"
+          },
+          "candidate_bbox": {
+            "$ref": "#/components/schemas/Roi"
+          },
+          "temperature_c": {
+            "$ref": "#/components/schemas/Temperature"
+          },
+          "roi_temperature_c": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RoiTemperature"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whole analysis ROI on the candidate's representative ATT frame; absent for older results"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/Evidence"
+          },
+          "result_image": {
+            "$ref": "#/components/schemas/ResultImage"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "candidate_id",
+          "rank",
+          "representative_frame",
+          "captured_at",
+          "gps",
+          "analysis_roi",
+          "candidate_bbox",
+          "temperature_c",
+          "evidence",
+          "result_image"
+        ],
+        "title": "Candidate"
+      },
+      "CreateJobRequest": {
+        "properties": {
+          "monitoring_data_id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "title": "Monitoring Data Id"
+          },
+          "att": {
+            "$ref": "#/components/schemas/FileReference"
+          },
+          "atg": {
+            "$ref": "#/components/schemas/FileReference"
+          },
+          "frame_range": {
+            "$ref": "#/components/schemas/RequestedFrameRange"
+          },
+          "analysis_roi": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Roi"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional pixel ROI inside the bottom-center cell of the full-frame 2-row, 3-column grid. If omitted, analyze that entire cell. For 384x288 input the cell is x=128, y=144, width=128, height=144. An ROI outside that cell fails during analysis."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "monitoring_data_id",
+          "att",
+          "atg"
+        ],
+        "title": "CreateJobRequest"
+      },
+      "CreateJobResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "monitoring_data_id": {
+            "type": "string",
+            "title": "Monitoring Data Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "job_id",
+          "monitoring_data_id",
+          "status",
+          "created_at"
+        ],
+        "title": "CreateJobResponse"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponse"
+      },
+      "Evidence": {
+        "properties": {
+          "algorithms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Algorithms"
+          },
+          "max_anomaly_score": {
+            "type": "number",
+            "title": "Max Anomaly Score"
+          },
+          "mean_anomaly_score": {
+            "type": "number",
+            "title": "Mean Anomaly Score"
+          },
+          "persistence_score": {
+            "type": "number",
+            "title": "Persistence Score"
+          },
+          "tracked_frame_count": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Tracked Frame Count"
+          },
+          "track_start_frame": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Track Start Frame"
+          },
+          "track_end_frame": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Track End Frame"
+          },
+          "likely_ground_fixed": {
+            "type": "boolean",
+            "title": "Likely Ground Fixed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "algorithms",
+          "max_anomaly_score",
+          "mean_anomaly_score",
+          "persistence_score",
+          "tracked_frame_count",
+          "track_start_frame",
+          "track_end_frame",
+          "likely_ground_fixed"
+        ],
+        "title": "Evidence"
+      },
+      "FileReference": {
+        "properties": {
+          "object_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Key"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2083,
+                "minLength": 1,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-fA-F0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "FileReference"
+      },
+      "Gps": {
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Latitude"
+          },
+          "longitude": {
+            "type": "number",
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Longitude"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "latitude",
+          "longitude"
+        ],
+        "title": "Gps"
+      },
+      "Grid": {
+        "properties": {
+          "rows": {
+            "type": "integer",
+            "const": 2,
+            "title": "Rows",
+            "default": 2
+          },
+          "columns": {
+            "type": "integer",
+            "const": 3,
+            "title": "Columns",
+            "default": 3
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "Grid"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok",
+            "title": "Status",
+            "default": "ok"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "HealthResponse"
+      },
+      "JobStatus": {
+        "type": "string",
+        "enum": [
+          "QUEUED",
+          "VALIDATING",
+          "DOWNLOADING",
+          "ANALYZING",
+          "RENDERING",
+          "UPLOADING",
+          "SUCCEEDED",
+          "FAILED"
+        ],
+        "title": "JobStatus"
+      },
+      "JobStatusResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "monitoring_data_id": {
+            "type": "string",
+            "title": "Monitoring Data Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/JobStatus"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "progress_percent": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Progress Percent"
+          },
+          "processed_frame_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Processed Frame Count"
+          },
+          "total_frame_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Frame Count"
+          },
+          "status_message": {
+            "type": "string",
+            "title": "Status Message"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Message"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "job_id",
+          "monitoring_data_id",
+          "status",
+          "created_at",
+          "progress_percent",
+          "processed_frame_count",
+          "status_message"
+        ],
+        "title": "JobStatusResponse"
+      },
+      "Message": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "Message"
+      },
+      "ProcessedFrameRange": {
+        "properties": {
+          "start": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start"
+          },
+          "end_exclusive": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "End Exclusive"
+          },
+          "stride": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Stride"
+          },
+          "total_att_frames": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Total Att Frames"
+          },
+          "total_atg_records": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total Atg Records"
+          },
+          "processed_frame_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Processed Frame Count"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "start",
+          "end_exclusive",
+          "stride",
+          "total_att_frames",
+          "total_atg_records",
+          "processed_frame_count"
+        ],
+        "title": "ProcessedFrameRange"
+      },
+      "Processing": {
+        "properties": {
+          "input": {
+            "$ref": "#/components/schemas/ProcessingInput"
+          },
+          "frame_range": {
+            "$ref": "#/components/schemas/ProcessedFrameRange"
+          },
+          "analysis_roi": {
+            "$ref": "#/components/schemas/Roi"
+          },
+          "algorithms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Algorithms"
+          },
+          "parameters": {
+            "$ref": "#/components/schemas/AnalysisParameters"
+          },
+          "elapsed_seconds": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Elapsed Seconds"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "input",
+          "frame_range",
+          "analysis_roi",
+          "algorithms",
+          "parameters",
+          "elapsed_seconds"
+        ],
+        "title": "Processing"
+      },
+      "ProcessingInput": {
+        "properties": {
+          "att_file_name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Att File Name"
+          },
+          "atg_file_name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Atg File Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "att_file_name",
+          "atg_file_name"
+        ],
+        "title": "ProcessingInput"
+      },
+      "RequestedFrameRange": {
+        "properties": {
+          "start": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start",
+            "default": 0
+          },
+          "end_exclusive": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Exclusive"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "RequestedFrameRange"
+      },
+      "ResultImage": {
+        "properties": {
+          "format": {
+            "type": "string",
+            "const": "PNG",
+            "title": "Format",
+            "default": "PNG"
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Width"
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Height"
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Path",
+            "description": "Stored object key in batch JSON; relative DaonH&S API image path in INT-001"
+          },
+          "grid": {
+            "$ref": "#/components/schemas/Grid"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "width",
+          "height",
+          "path",
+          "grid"
+        ],
+        "title": "ResultImage"
+      },
+      "Roi": {
+        "properties": {
+          "x": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "X"
+          },
+          "y": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Y"
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Width"
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Height"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "x",
+          "y",
+          "width",
+          "height"
+        ],
+        "title": "Roi"
+      },
+      "RoiTemperature": {
+        "properties": {
+          "minimum": {
+            "type": "number",
+            "title": "Minimum"
+          },
+          "mean": {
+            "type": "number",
+            "title": "Mean"
+          },
+          "maximum": {
+            "type": "number",
+            "title": "Maximum"
+          },
+          "max_minus_min": {
+            "type": "number",
+            "title": "Max Minus Min"
+          },
+          "max_minus_mean": {
+            "type": "number",
+            "title": "Max Minus Mean"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "minimum",
+          "mean",
+          "maximum",
+          "max_minus_min",
+          "max_minus_mean"
+        ],
+        "title": "RoiTemperature"
+      },
+      "Temperature": {
+        "properties": {
+          "minimum": {
+            "type": "number",
+            "title": "Minimum"
+          },
+          "mean": {
+            "type": "number",
+            "title": "Mean"
+          },
+          "maximum": {
+            "type": "number",
+            "title": "Maximum"
+          },
+          "background_median": {
+            "type": "number",
+            "title": "Background Median"
+          },
+          "delta_from_background": {
+            "type": "number",
+            "title": "Delta From Background"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "minimum",
+          "mean",
+          "maximum",
+          "background_median",
+          "delta_from_background"
+        ],
+        "title": "Temperature"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VersionResponse": {
+        "properties": {
+          "version": {
+            "type": "string",
+            "title": "Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "title": "VersionResponse"
+      }
+    },
+    "securitySchemes": {
+      "VtiBearerApiKey": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

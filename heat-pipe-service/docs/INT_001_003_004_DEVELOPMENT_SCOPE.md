@@ -126,6 +126,14 @@ GET /api/v1/analysis-jobs/{jobId}
 GET /api/v1/analysis-jobs/{jobId}/results
 ```
 
+후보 PNG 제공 기본안은 같은 DaonH&S API의 하위 경로를 사용한다.
+
+```http
+GET /api/v1/analysis-jobs/{jobId}/images/{candidateId}
+```
+
+INT-001의 `result_image.path`는 이 상대 API 경로를 반환한다. VTI는 결과 저장소나 MinIO 버킷에 직접 접근하지 않고 DaonH&S API에서 JSON과 PNG를 조회한다.
+
 ### 응답 범위
 
 - 스키마 버전
@@ -139,7 +147,7 @@ GET /api/v1/analysis-jobs/{jobId}/results
 - 분석 ROI와 후보 영역 좌표
 - 후보 영역 온도와 주변 대비 온도차
 - 탐지 알고리즘·이상점수·지속성 근거
-- 결과 PNG의 Object Key 또는 접근 URL
+- 결과 PNG의 DaonH&S API 상대 경로(현재 기본안)
 - 경고 및 오류 정보
 
 결과 PNG는 DaonH&S가 열화상 원본 해상도 384×288로 생성하며, 2×3 격자와
@@ -229,7 +237,7 @@ GET /api/v1/analysis-jobs/{jobId}/results
 - 상태값, 진행률 제공 여부 및 계산 기준
 - 후보 ID 생성 주체·형식·재분석 시 유지 정책
 - `job_id` 형식과 요청 재시도·중복 방지 정책
-- 이미지 Object Key 또는 접근 URL 방식
+- 결과 PNG를 DaonH&S API 상대 경로로 제공하는 현재 기본안의 연동 확인
 - 분석 구간과 ROI 좌표 형식
 - 인증 방식
 - 오류 코드와 HTTP 상태 코드

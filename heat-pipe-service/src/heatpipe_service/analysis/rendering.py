@@ -43,8 +43,9 @@ def draw_result_image(
     candidate_id: str,
     grid_rows: int = 2,
     grid_columns: int = 3,
+    analysis_roi: tuple[int, int, int, int] | None = None,
 ) -> np.ndarray:
-    """Render the agreed 2x3 grid and one candidate on the original frame size."""
+    """Show the display grid, analysis ROI and candidate on the full frame."""
     if grid_rows <= 0 or grid_columns <= 0:
         raise ValueError("display grid dimensions must be positive")
 
@@ -57,6 +58,10 @@ def draw_result_image(
     for row in range(1, grid_rows):
         y = int(round(height * row / grid_rows))
         cv2.line(image, (0, y), (width - 1, y), grid_color, 1, cv2.LINE_AA)
+
+    if analysis_roi is not None:
+        rx0, ry0, rx1, ry1 = analysis_roi
+        cv2.rectangle(image, (rx0, ry0), (rx1 - 1, ry1 - 1), (0, 0, 255), 2, cv2.LINE_AA)
 
     x0, y0, x1, y1 = candidate_bbox
     cv2.rectangle(image, (x0, y0), (x1, y1), (0, 255, 0), 2, cv2.LINE_AA)
