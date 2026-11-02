@@ -1,0 +1,21 @@
+# Local-only HTTPS source; never use as the VTI file server.
+services:
+  files:
+    image: python:3.11-slim
+    command: ["python", "/fixture/https_file_fixture.py"]
+    environment:
+      HEATPIPE_API_TOKEN: ${HEATPIPE_API_TOKEN:?Set HEATPIPE_API_TOKEN in .env}
+    volumes:
+      - heatpipe_data:/data:ro
+      - ./tmp/url-fixture:/certs:ro
+      - ./scripts/https_file_fixture.py:/fixture/https_file_fixture.py:ro
+    restart: "no"
+
+  worker:
+    environment:
+      HEATPIPE_ALLOWED_SOURCE_HOSTS: files
+      SSL_CERT_FILE: /certs/cert.pem
+      NO_PROXY: files,localhost,127.0.0.1
+      no_proxy: files,localhost,127.0.0.1
+    volumes:
+      - ./tmp/url-fixture:/certs:ro

@@ -6,8 +6,11 @@
 
 ## 기준 문서
 
+현재 진행 단계와 남은 일은 [진행 현황](PROJECT_STATUS_2026-11-02.md)에 요약한다.
+
 | 문서 | 상태 | 용도 |
 |---|---|---|
+| [`PROJECT_STATUS_2026-11-02.md`](PROJECT_STATUS_2026-11-02.md) | 현재 현황 | 완료된 로컬 구현·검증과 남은 연동·AI 모델 작업 |
 | [`INT_001_003_004_DEVELOPMENT_SCOPE.md`](INT_001_003_004_DEVELOPMENT_SCOPE.md) | 현재 범위 기준 | VTI–DaonH&S 개발 책임과 연동 범위 |
 | [`BATCH_PIPELINE_AND_RESULT_SCHEMA_V0.md`](BATCH_PIPELINE_AND_RESULT_SCHEMA_V0.md) | 내부 구현 초안 | 배치 분석 흐름과 결과 JSON 정책 |
 | [`schemas/analysis-result-v0.schema.json`](schemas/analysis-result-v0.schema.json) | 내부 검토용 v0 | 분석 결과 JSON Schema |
@@ -24,6 +27,7 @@
 | [`GPU_ANALYSIS.md`](GPU_ANALYSIS.md) | 선택형 GPU 구현·검증 | CuPy 점수맵, CUDA 분석 워커 실행, CPU 결과 비교와 성능 |
 | [`REAL_DATA_GPU_DOCKER_2026-11-02.md`](REAL_DATA_GPU_DOCKER_2026-11-02.md) | 검증 기록 | 실제 ATT·ATG 전체 3,959프레임 GPU Docker API 결과 |
 | [`CPU_GPU_DOCKER_COMPARISON_2026-11-02.md`](CPU_GPU_DOCKER_COMPARISON_2026-11-02.md) | 비교 기록 | 같은 Docker 환경에서 실제 전체 프레임 CPU·GPU 시간과 결과 비교 |
+| [`HTTPS_URL_LOCAL_TEST_2026-11-02.md`](HTTPS_URL_LOCAL_TEST_2026-11-02.md) | 검증 기록 | 로컬 서명 HTTPS URL의 실제 ATT·ATG 전체 다운로드·오류 처리 |
 | [`Q15_VTI_INTEGRATION_API_DRAFT.md`](Q15_VTI_INTEGRATION_API_DRAFT.md) | VTI 협의용 초안 | Q15 연동 흐름·요청/응답·인증·오류·미확정 정책 |
 | [`VTI_INTEGRATION_TEST_CHECKLIST.md`](VTI_INTEGRATION_TEST_CHECKLIST.md) | 시험 준비 목록 | 연동 시험 전 완료·합의·검증할 항목 |
 

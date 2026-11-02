@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import hmac
 import json
 import struct
 import time
@@ -47,7 +49,11 @@ def _token() -> str:
     raise RuntimeError("HEATPIPE_API_TOKEN is missing from .env")
 
 
-def verify(base_url: str, att: Path, atg: Path, monitoring_id: str, frames: int | None, timeout: int) -> None:
+def verify(
+    base_url: str, att: Path, atg: Path, monitoring_id: str, frames: int | None,
+    timeout: int, source_url: str | None, url_ttl: int, att_size_adjust: int,
+    expect_error: str | None,
+) -> None:
     token = _token()
     base_url = base_url.rstrip("/")
 
@@ -68,10 +74,23 @@ def verify(base_url: str, att: Path, atg: Path, monitoring_id: str, frames: int 
         except urllib.error.HTTPError as exc:
             raise RuntimeError(f"{method} {path}: HTTP {exc.code} {exc.read().decode()}") from exc
 
+    def reference(file: Path, size_adjust: int = 0) -> dict:
+        item = {"size_bytes": file.stat().st_size + size_adjust}
+        if source_url is None:
+            item["object_key"] = f"inputs/{file.name}"
+        else:
+            path = f"/files/{file.name}"
+            expires = int(time.time()) + url_ttl
+            signature = hmac.new(
+                token.encode(), f"{path}\n{expires}".encode(), hashlib.sha256,
+            ).hexdigest()
+            item["url"] = f"{source_url.rstrip('/')}{path}?expires={expires}&signature={signature}"
+        return item
+
     payload = {
         "monitoring_data_id": monitoring_id,
-        "att": {"object_key": f"inputs/{att.name}", "size_bytes": att.stat().st_size},
-        "atg": {"object_key": f"inputs/{atg.name}", "size_bytes": atg.stat().st_size},
+        "att": reference(att, att_size_adjust),
+        "atg": reference(atg),
     }
     if frames is not None:
         payload["frame_range"] = {"start": 0, "end_exclusive": frames}
@@ -93,6 +112,11 @@ def verify(base_url: str, att: Path, atg: Path, monitoring_id: str, frames: int 
         if time.monotonic() > deadline:
             raise TimeoutError(f"Job {job_id} remained {status['status']}")
         time.sleep(1)
+    if expect_error:
+        assert status["status"] == "FAILED", status
+        assert status["error"]["code"] == expect_error, status
+        print(json.dumps({"job_id": job_id, "status": "FAILED", "error_code": expect_error}))
+        return
     assert status["status"] == "SUCCEEDED", status
     result_code, result_body, _ = request("GET", f"/api/v1/analysis-jobs/{job_id}/results")
     assert result_code == 200
@@ -122,6 +146,10 @@ if __name__ == "__main__":
     parser.add_argument("--monitoring-id", default=MONITORING_ID)
     parser.add_argument("--frames", type=int)
     parser.add_argument("--timeout", type=int, default=90)
+    parser.add_argument("--source-url", help="HTTPS source base URL for signed ATT/ATG download")
+    parser.add_argument("--url-ttl", type=int, default=3600)
+    parser.add_argument("--att-size-adjust", type=int, default=0)
+    parser.add_argument("--expect-error")
     args = parser.parse_args()
     if args.action == "prepare":
         prepare()
@@ -129,4 +157,7 @@ if __name__ == "__main__":
         frames = args.frames
         if frames is None and args.monitoring_id == MONITORING_ID:
             frames = 4
-        verify(args.base_url, args.att, args.atg, args.monitoring_id, frames, args.timeout)
+        verify(
+            args.base_url, args.att, args.atg, args.monitoring_id, frames, args.timeout,
+            args.source_url, args.url_ttl, args.att_size_adjust, args.expect_error,
+        )

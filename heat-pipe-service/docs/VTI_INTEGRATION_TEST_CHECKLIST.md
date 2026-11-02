@@ -17,10 +17,11 @@
 - [x] 로컬 WSL Ubuntu Docker Compose에서 API·분석 워커 배포, 영속 볼륨, 재시작 후 상태, 임시 파일 정리, 합성 4프레임 HTTP 작업 결과·PNG를 검증. [기록](DOCKER_DEPLOYMENT.md).
 - [x] 실제 ATT·ATG 전체 3,959프레임을 GPU Docker API→분석 워커→결과 JSON·PNG로 검증. 50개 후보가 기존 CPU 배치 결과의 위치·온도·최대 이상점수와 일치. [기록](REAL_DATA_GPU_DOCKER_2026-11-02.md).
 - [x] 동일 WSL Docker 환경에서 CPU 분석 워커로 전체 3,959프레임 재실행. GPU 95.227초, CPU 427.246초이고 후보 50건의 주요 값 일치. [비교](CPU_GPU_DOCKER_COMPARISON_2026-11-02.md).
+- [x] 로컬 모의 서명 HTTPS URL로 실제 875MB ATT·ATG 전체 다운로드→GPU 분석→결과 조회를 검증. 크기 불일치·허용되지 않은 호스트·만료 URL 오류도 확인. [기록](HTTPS_URL_LOCAL_TEST_2026-11-02.md).
 
 ## VTI 연동 시험 전 완료
 
-- [ ] **파일 전달:** VTI가 실제 ATT·ATG를 MinIO에 업로드하고 각 파일의 Presigned HTTPS GET URL을 INT-003에 제공한다. DaonH&S 분석 워커에서 해당 호스트 접근 및 약 770MB ATT 다운로드를 시험한다.
+- [ ] **VTI 실제 파일 전달:** 로컬 모의 HTTPS URL 검증은 완료했다. VTI가 실제 ATT·ATG를 MinIO에 업로드하고 각 파일의 Presigned HTTPS GET URL을 INT-003에 제공할 때, DaonH&S 시험 서버에서 해당 호스트 접근 및 약 770MB ATT 다운로드를 다시 시험한다.
 - [ ] **URL 수명·무결성:** 대기 시간·다운로드 시간·자동 재시도까지 URL이 유효한지 확인하고 크기/SHA-256 제공 여부를 합의한다. URL 만료·잘못된 파일·접근 거절 때 INT-004 오류를 시험한다.
 - [ ] **전체 구간 후보 품질:** API→분석 워커 경유 전체 구간과 PNG HTTP 조회는 확인했다. 차량 부근에 상위 후보가 집중되므로 후보 품질을 검토한다.
 - [ ] **GPU 시험 서버 배포:** DaonH&S 시험 서버에서 GPU 모델·드라이버·Docker GPU 지원을 확인하고 `compose.gpu.yaml`로 API와 단일 CUDA 분석 워커를 가동한다. 영속 볼륨, 재시작 후 상태, 임시 파일 정리와 실제 입력 한 건을 서버에서 재확인한다. 로컬 Docker 검증은 완료했다.
