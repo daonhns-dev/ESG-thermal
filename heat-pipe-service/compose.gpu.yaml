@@ -1,0 +1,11 @@
+# Opt-in CUDA worker. Build the CPU API image first, then this override.
+services:
+  worker:
+    image: heatpipe-service:gpu
+    build:
+      context: .
+      args:
+        INSTALL_GPU: "1"
+    gpus: all
+    environment:
+      HEATPIPE_ANALYSIS_DEVICE: cuda

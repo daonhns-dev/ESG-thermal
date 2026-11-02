@@ -15,7 +15,7 @@ from typing import Any, Callable
 
 import numpy as np
 
-from heatpipe_service.analysis.algorithms import V0_CANDIDATE_ALGORITHMS, score_map
+from heatpipe_service.analysis.algorithms import V0_CANDIDATE_ALGORITHMS, score_maps
 from heatpipe_service.analysis.candidates import extract_candidates
 from heatpipe_service.analysis.io import (
     AtgRecord,
@@ -50,6 +50,7 @@ class BatchRequest:
 @dataclass(frozen=True)
 class BatchConfig:
     algorithms: tuple[str, ...] = V0_CANDIDATE_ALGORITHMS
+    analysis_device: str = "cpu"
     frame_stride: int = 1
     score_threshold: float = 3.0
     min_area: int = 20
@@ -302,6 +303,8 @@ def _validate_request(request: BatchRequest, config: BatchConfig) -> None:
         raise ValueError("min_track_frames and max_results must be positive")
     if not config.algorithms:
         raise ValueError("at least one algorithm is required")
+    if config.analysis_device not in {"cpu", "cuda"}:
+        raise ValueError("analysis_device must be cpu or cuda")
 
 
 def _resolve_frame_range(request: BatchRequest, total_frames: int) -> tuple[int, int]:
@@ -317,8 +320,9 @@ def _frame_candidates(frame_c: np.ndarray, roi: Roi, config: BatchConfig,) -> li
     x0, y0, x1, y1 = roi
     roi_frame = frame_c[y0:y1, x0:x1]
     rows: list[dict[str, Any]] = []
-    for algorithm in config.algorithms:
-        scores = score_map(roi_frame, algorithm)
+    for algorithm, scores in zip(
+        config.algorithms, score_maps(roi_frame, config.algorithms, config.analysis_device), strict=True,
+    ):
         detected = extract_candidates(
             roi_frame,
             scores,
@@ -615,6 +619,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-track-frames", type=int, default=3)
     parser.add_argument("--max-results", type=int, default=50)
     parser.add_argument("--roi", nargs=4, type=int, metavar=("X0", "Y0", "X1", "Y1"))
+    parser.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
     return parser
 
 
@@ -631,6 +636,7 @@ def main() -> None:
         analysis_roi=tuple(args.roi) if args.roi else None,
     )
     config = BatchConfig(
+        analysis_device=args.device,
         frame_stride=args.frame_stride,
         min_track_frames=args.min_track_frames,
         max_results=args.max_results,

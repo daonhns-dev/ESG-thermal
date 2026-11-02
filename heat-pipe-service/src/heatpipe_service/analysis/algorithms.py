@@ -64,6 +64,17 @@ def score_map(
     raise ValueError(f"unknown algorithm: {algorithm}")
 
 
+def score_maps(grid_c: np.ndarray, algorithms: Sequence[str], device: str = "cpu") -> list[np.ndarray]:
+    """Score one frame on the selected device and return CPU arrays for extraction."""
+    if device == "cpu":
+        return [score_map(grid_c, algorithm) for algorithm in algorithms]
+    if device == "cuda":
+        from .gpu import cuda_score_maps
+
+        return cuda_score_maps(grid_c, algorithms)
+    raise ValueError(f"unknown analysis device: {device}")
+
+
 def _robust_scale(residual: np.ndarray) -> np.ndarray:
     median = np.median(residual)
     mad = np.median(np.abs(residual - median)) * 1.4826 + 1e-6

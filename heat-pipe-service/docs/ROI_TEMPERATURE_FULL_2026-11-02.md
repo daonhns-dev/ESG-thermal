@@ -44,4 +44,4 @@ ATT 3,959프레임과 ATG 3,885레코드의 차이는 기존과 같이 `ATT_ATG_
 - [후보 CSV](../output/full-frame-center-roi-temp-20261102/analysis_candidates.csv)
 - [1순위 PNG](../output/full-frame-center-roi-temp-20261102/images/20260813_132634_JOB-20261102-000004-CAND-0001_f001667.png)
 
-이번 실행은 배치 CLI 검증이다. 새 필드가 작업 실행기와 INT-001 HTTP 응답까지 전달되는지는 단위·통합 테스트로 확인했다. 실제 VTI 연동 시험은 아직 수행하지 않았다.
+이번 실행은 배치 CLI 검증이다. 새 필드가 분석 워커와 INT-001 HTTP 응답까지 전달되는지는 단위·통합 테스트로 확인했다. 실제 VTI 연동 시험은 아직 수행하지 않았다.

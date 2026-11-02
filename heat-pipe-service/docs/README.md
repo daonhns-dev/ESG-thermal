@@ -15,15 +15,19 @@
 | [`CORE_MIGRATION.md`](CORE_MIGRATION.md) | 완료 기록 | PoC 이상탐지 코어 이관 및 검증 내역 |
 | [`openapi.json`](openapi.json) | 현재 Mock API 출력 사본 | 서버의 `/openapi.json`에서 생성되는 OpenAPI 명세 |
 | [`JOB_STATE_V0.md`](JOB_STATE_V0.md) | 내부 구현안 | SQLite 작업 상태·진행률·재시도 정책 |
-| [`STORAGE_WORKER_V0.md`](STORAGE_WORKER_V0.md) | 내부 구현안 | 로컬·MinIO 저장소와 단일 작업 실행기 운영 |
+| [`STORAGE_WORKER_V0.md`](STORAGE_WORKER_V0.md) | 내부 구현안 | 로컬·MinIO 저장소와 단일 분석 워커 운영 |
 | [`REAL_DATA_SMOKE_2026-11-02.md`](REAL_DATA_SMOKE_2026-11-02.md) | 검증 기록 | 실제 ATT·ATG 30프레임 단일 작업 결과 |
 | [`REAL_DATA_FULL_2026-11-02.md`](REAL_DATA_FULL_2026-11-02.md) | 검증 기록 | 실제 ATT·ATG 전체 3,959프레임 배치 결과 |
 | [`REAL_DATA_CENTER_ROI_2026-11-02.md`](REAL_DATA_CENTER_ROI_2026-11-02.md) | 검증 기록 | 하단 가운데 ROI로 전체 3,959프레임 재분석 |
 | [`ROI_TEMPERATURE_FULL_2026-11-02.md`](ROI_TEMPERATURE_FULL_2026-11-02.md) | 검증 기록 | 대표 프레임 ROI 온도 통계 포함 전체 프레임 결과 |
+| [`DOCKER_DEPLOYMENT.md`](DOCKER_DEPLOYMENT.md) | 배포 검증 기록 | API·분석 워커 Compose 실행과 HTTP 작업 검증, VTI 시험 서버 확인 항목 |
+| [`GPU_ANALYSIS.md`](GPU_ANALYSIS.md) | 선택형 GPU 구현·검증 | CuPy 점수맵, CUDA 분석 워커 실행, CPU 결과 비교와 성능 |
+| [`REAL_DATA_GPU_DOCKER_2026-11-02.md`](REAL_DATA_GPU_DOCKER_2026-11-02.md) | 검증 기록 | 실제 ATT·ATG 전체 3,959프레임 GPU Docker API 결과 |
+| [`CPU_GPU_DOCKER_COMPARISON_2026-11-02.md`](CPU_GPU_DOCKER_COMPARISON_2026-11-02.md) | 비교 기록 | 같은 Docker 환경에서 실제 전체 프레임 CPU·GPU 시간과 결과 비교 |
 | [`Q15_VTI_INTEGRATION_API_DRAFT.md`](Q15_VTI_INTEGRATION_API_DRAFT.md) | VTI 협의용 초안 | Q15 연동 흐름·요청/응답·인증·오류·미확정 정책 |
 | [`VTI_INTEGRATION_TEST_CHECKLIST.md`](VTI_INTEGRATION_TEST_CHECKLIST.md) | 시험 준비 목록 | 연동 시험 전 완료·합의·검증할 항목 |
 
-INT-001·003·004의 제안 요청·응답 모델과 OpenAPI는 `src/heatpipe_service/api`에 구현되어 있다. 실행 방법은 [프로젝트 README](../README.md#api-및-openapi)를 참고한다. SQLite 작업 상태, 로컬·선택적 MinIO 저장소와 별도 작업 실행기, 완료 작업의 JSON·PNG 조회, Bearer 인증이 구현되어 있다.
+INT-001·003·004의 제안 요청·응답 모델과 OpenAPI는 `src/heatpipe_service/api`에 구현되어 있다. 실행 방법은 [프로젝트 README](../README.md#api-및-openapi)를 참고한다. SQLite 작업 상태, 로컬·선택적 MinIO 저장소와 별도 분석 워커, 완료 작업의 JSON·PNG 조회, Bearer 인증이 구현되어 있다.
 
 ## 문서 변경 원칙
 

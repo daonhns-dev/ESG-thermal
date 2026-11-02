@@ -17,7 +17,7 @@ VTI: ATT·ATG를 MinIO에 업로드
   → VTI: 후보 ID를 유지하고 관로 매칭·최종 판정·화면 표시
 ```
 
-**파일 전송 기본안(확정 필요):** VTI가 ATT·ATG를 자체 MinIO에 업로드한 뒤 각각의 **Presigned HTTPS GET URL**을 INT-003에 보낸다. 약 770MB인 ATT 본문은 API에 직접 업로드하지 않는다. DaonH&S 작업 실행기가 URL에서 파일을 내려받는다. 이 방식에는 DaonH&S의 VTI MinIO 계정이 필요하지 않다. `object_key`도 구현되어 있으나 공유 로컬 저장소 또는 MinIO 읽기 권한이 따로 필요하므로 연동 기본안은 URL이다. URL 호스트는 DaonH&S의 허용 목록에 등록해야 하며 HTTP와 리다이렉트는 허용되지 않는다. URL 유효기간은 작업 대기·다운로드·자동 재시도를 포함하도록 양측이 정한다.
+**파일 전송 기본안(확정 필요):** VTI가 ATT·ATG를 자체 MinIO에 업로드한 뒤 각각의 **Presigned HTTPS GET URL**을 INT-003에 보낸다. 약 770MB인 ATT 본문은 API에 직접 업로드하지 않는다. DaonH&S 분석 워커가 URL에서 파일을 내려받는다. 이 방식에는 DaonH&S의 VTI MinIO 계정이 필요하지 않다. `object_key`도 구현되어 있으나 공유 로컬 저장소 또는 MinIO 읽기 권한이 따로 필요하므로 연동 기본안은 URL이다. URL 호스트는 DaonH&S의 허용 목록에 등록해야 하며 HTTP와 리다이렉트는 허용되지 않는다. URL 유효기간은 작업 대기·다운로드·자동 재시도를 포함하도록 양측이 정한다.
 
 **결과 전달 기본안(확정 필요):** DaonH&S가 결과 JSON·CSV·PNG를 자체 저장소에 보관하고 VTI 백엔드가 Bearer 인증으로 JSON과 PNG를 API에서 읽는다. VTI가 결과 저장소나 MinIO에 직접 접근할 필요는 없다. `result_image.path`는 API 기준 주소에 붙일 상대 경로다. VTI 프런트엔드에는 Bearer 키를 전달하지 않고 VTI 백엔드에서 PNG를 중계한다. CSV는 내부 저장 산출물이며 이 초안의 API 조회 대상은 아니다.
 
@@ -33,7 +33,7 @@ VTI: ATT·ATG를 MinIO에 업로드
 | 작업 ID | 현재 `JOB-YYYYMMDD-NNNNNN`. 새 INT-003 요청마다 새 ID가 발급된다. |
 | 후보 ID | 현재 DaonH&S가 `JOB-YYYYMMDD-NNNNNN-CAND-NNNN` 생성. 재분석은 새 작업이므로 동일 후보 ID 유지가 보장되지 않는다. |
 
-`/docs`와 `/openapi.json`은 서버가 실행 중일 때 기준 주소에 붙여 조회한다. 정적 사본은 [openapi.json](openapi.json)이다. 별도 작업 실행기가 가동되어야 접수 작업이 진행된다.
+`/docs`와 `/openapi.json`은 서버가 실행 중일 때 기준 주소에 붙여 조회한다. 정적 사본은 [openapi.json](openapi.json)이다. 별도 분석 워커가 가동되어야 접수 작업이 진행된다.
 
 ## 3. INT-003: 분석 요청 및 접수 확인
 
@@ -117,7 +117,7 @@ Content-Type: application/json
 }
 ```
 
-**분석 완료 알림 기본안(확정 필요):** 콜백 없이 VTI가 이 경로를 주기적으로 조회한다. `SUCCEEDED`일 때 INT-001을 호출하고 `FAILED`일 때 오류를 표시한다. 폴링 간격과 최대 조회 시간은 VTI와 연동 시험 전 확정한다. API 서버의 가동 확인(`/health`)만으로 작업 실행기의 가동은 확인되지 않는다.
+**분석 완료 알림 기본안(확정 필요):** 콜백 없이 VTI가 이 경로를 주기적으로 조회한다. `SUCCEEDED`일 때 INT-001을 호출하고 `FAILED`일 때 오류를 표시한다. 폴링 간격과 최대 조회 시간은 VTI와 연동 시험 전 확정한다. API 서버의 가동 확인(`/health`)만으로 분석 워커의 가동은 확인되지 않는다.
 
 ## 5. INT-001: 결과 JSON과 후보 PNG 조회
 
@@ -166,6 +166,6 @@ API 오류 형식:
 
 ## 7. 현재 검증과 연동 시험 전 확정 사항
 
-현재 FastAPI·Bearer·SQLite 상태/진행률·단일 작업 실행기·결과 JSON/PNG 조회가 구현되어 있다. 2026-11-02 실제 ATT·ATG의 첫 30프레임을 로컬 파일 참조로 접수부터 PNG 조회까지 실행했고 50개 후보와 임시 파일 정리를 확인했다. 이는 **VTI Presigned URL/실제 네트워크·전체 프레임·VTI 통합 연동을 검증한 결과는 아니다**. 근거는 [실데이터 검증 기록](REAL_DATA_SMOKE_2026-11-02.md)이다.
+현재 FastAPI·Bearer·SQLite 상태/진행률·단일 분석 워커·결과 JSON/PNG 조회가 구현되어 있다. 2026-11-02 실제 ATT·ATG의 첫 30프레임을 로컬 파일 참조로 접수부터 PNG 조회까지 실행했고 50개 후보와 임시 파일 정리를 확인했다. 이는 **VTI Presigned URL/실제 네트워크·전체 프레임·VTI 통합 연동을 검증한 결과는 아니다**. 근거는 [실데이터 검증 기록](REAL_DATA_SMOKE_2026-11-02.md)이다.
 
 양측 확정이 필요한 항목은 ATT·ATG URL의 발급 주체·허용 호스트·유효기간, 배포 HTTPS 기준 주소와 접근망, Bearer 키 전달·교체, 폴링 주기·최대 대기 시간, `job_id` 중복 요청 정책, 재분석 시 후보 ID 매핑, 결과 보관·삭제 기간이다. 작업별 준비·검증 상태는 [VTI 연동 시험 체크리스트](VTI_INTEGRATION_TEST_CHECKLIST.md)에 기록한다.

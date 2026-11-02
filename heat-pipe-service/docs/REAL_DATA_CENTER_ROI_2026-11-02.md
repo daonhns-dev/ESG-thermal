@@ -33,4 +33,4 @@
 - [후보 CSV](../output/full-frame-center-roi-20261102/analysis_candidates.csv)
 - [1순위 PNG](../output/full-frame-center-roi-20261102/images/20260813_132634_JOB-20261102-000003-CAND-0001_f001667.png)
 
-이 실행은 배치 CLI에서 수행했다. API→작업 실행기→HTTP 결과 조회 흐름은 앞서 [30프레임 검증](REAL_DATA_SMOKE_2026-11-02.md)으로 확인했다.
+이 실행은 배치 CLI에서 수행했다. API→분석 워커→HTTP 결과 조회 흐름은 앞서 [30프레임 검증](REAL_DATA_SMOKE_2026-11-02.md)으로 확인했다.

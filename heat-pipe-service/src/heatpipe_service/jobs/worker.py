@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 
 from heatpipe_service.api.models import AnalysisResultResponse, JobStatus, Message
-from heatpipe_service.jobs.batch import BatchProgress, BatchRequest, run_batch_safely
+from heatpipe_service.jobs.batch import BatchConfig, BatchProgress, BatchRequest, run_batch_safely
 from heatpipe_service.jobs.store import InvalidJobUpdate, JobStore
 from heatpipe_service.storage.backends import Storage, StorageError, storage_from_env
 
@@ -101,6 +101,7 @@ class JobWorker:
                 frame_end=request.frame_range.end_exclusive,
                 analysis_roi=(roi.x, roi.y, roi.x + roi.width, roi.y + roi.height) if roi else None,
             ),
+            config=BatchConfig(analysis_device=os.environ.get("HEATPIPE_ANALYSIS_DEVICE", "cpu")),
             on_progress=on_progress,
         )
         if not artifacts.success:
@@ -147,6 +148,13 @@ def main() -> None:
     args = parser.parse_args()
     if args.poll_seconds <= 0:
         parser.error("--poll-seconds must be positive")
+    device = os.environ.get("HEATPIPE_ANALYSIS_DEVICE", "cpu")
+    if device == "cuda":
+        from heatpipe_service.analysis.gpu import require_cuda
+
+        require_cuda()
+    elif device != "cpu":
+        parser.error("HEATPIPE_ANALYSIS_DEVICE must be cpu or cuda")
     store = JobStore(os.environ.get("HEATPIPE_JOB_DB_PATH", "data/jobs.sqlite3"))
     store.recover_interrupted()
     worker = JobWorker(store, storage_from_env(), os.environ.get("HEATPIPE_WORK_ROOT", "data/work"))
