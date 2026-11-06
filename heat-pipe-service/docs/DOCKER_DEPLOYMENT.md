@@ -13,9 +13,13 @@ docker compose up -d --build
 docker compose ps
 ```
 
-기본 바인딩은 `127.0.0.1:18001`이다. `/health`, `/version`, `/docs`, `/openapi.json`에서 서비스 상태와 명세를 확인할 수 있다. VTI 시험 서버에서는 HTTPS 프록시 뒤에 배치하고, 필요한 네트워크 정책에 맞게 `HEATPIPE_BIND_HOST`를 설정한다. Bearer 키는 VTI 백엔드와 서버 사이에서만 사용한다.
+기본 바인딩은 `127.0.0.1:18001`이다. Compose는 `HEATPIPE_ENV=production`을 고정해 `/docs`, `/redoc`, `/openapi.json` 경로를 만들지 않는다(HTTP 404). `/health`와 `/version`은 계속 인증 없이 확인할 수 있다. OpenAPI 정적 사본은 `docs/openapi.json` 파일로 별도 전달한다. VTI 시험 서버에서는 HTTPS 프록시 뒤에 배치하고, 필요한 네트워크 정책에 맞게 `HEATPIPE_BIND_HOST`를 설정한다. Bearer 키는 VTI 백엔드와 서버 사이에서만 사용한다.
+
+VTI가 시험용 Presigned URL의 **호스트명**을 별도 전달하면, 연동 시험 전 `.env`의 `HEATPIPE_ALLOWED_SOURCE_HOSTS`에 등록한다(쉼표로 복수 호스트 구분, 스킴·경로·포트·서명 쿼리는 넣지 않음). API와 워커가 같은 설정을 사용하므로 변경 후 `docker compose up -d --force-recreate api worker`로 적용한다. 시험 서버처럼 서로 다른 서버 간 파일 전송은 HTTPS를 사용한다. 최종 동일 서버 배포에서는 포털 백엔드→분석 API와 분석 워커→MinIO를 공유 Docker 내부망의 HTTP 서비스 주소로 연결한다. 후자의 **MinIO 서비스 호스트명만** `HEATPIPE_ALLOWED_INTERNAL_HTTP_HOSTS`에 등록한다. HTTP 허용 목록은 기본적으로 비어 있고, 외부 호스트는 등록하지 않는다. 실제 내부 서비스 이름·포트·네트워크 연결은 VTI Compose 구성과 함께 확인한다. Presigned URL의 서명 경로·쿼리를 변경하거나 리다이렉트하지 않아야 한다.
 
 API와 분석 워커는 `heatpipe_data` 볼륨을 공유한다. `/data/jobs.sqlite3`에 작업 상태, `/data/objects`에 입력 및 결과 파일, `/data/work`에 처리 중 임시 파일이 있다. CPU 배포 갱신은 `docker compose up -d --build`를 사용한다. 볼륨을 지우는 명령은 사용하지 않는다.
+
+VTI 연동 정책에 따라 `SUCCEEDED` 작업의 결과 JSON·후보 PNG는 완료 시각부터 최소 7일 보관한다. 현재 자동 삭제 기능은 없으므로 배포·갱신 시 `heatpipe_data` 볼륨을 유지하고 디스크 사용량을 점검한다. 시험 서버에서 7일치 결과의 저장 공간과 장애 시 복구 절차를 확인해야 한다. 7일 이후 삭제 시점은 별도 운영 정책으로 정한다.
 
 DaonH&S GPU 시험 서버의 목표 배포는 [선택형 GPU 구성](GPU_ANALYSIS.md)의 `compose.gpu.yaml`을 함께 사용하는 방식이다. API는 CPU 이미지, 분석 워커만 GPU 이미지를 사용한다. 시험 서버에 실제 배포하기 전 GPU 모델·드라이버·Docker GPU 지원을 확인해야 한다.
 
@@ -48,7 +52,7 @@ Windows 터미널에서 API 요청·상태 조회·결과·PNG를 검증한다. 
 | 항목 | 결과 |
 |---|---|
 | WSL Ubuntu Docker Compose 빌드·시작 | 통과, API healthy·분석 워커 실행 |
-| 호스트 `127.0.0.1:18001` | `/health`, `/version`, `/openapi.json` 응답 |
+| 당시 개발 구성의 호스트 `127.0.0.1:18001` | `/health`, `/version`, `/openapi.json` 응답. 현재 운영 Compose에서는 `/openapi.json`을 비활성화함. |
 | 인증된 INT-003 → INT-004 → INT-001 | `SUCCEEDED`, 4/4프레임, 진행률 100%, 후보 1건 |
 | ROI ATT 온도 통계 | 최저 29.77℃, 평균 30.4℃, 최고 35.18℃ |
 | 후보 PNG | 인증된 API에서 `image/png` 응답 |

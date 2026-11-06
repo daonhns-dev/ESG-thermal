@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:daonhns:schema:thermal-analysis-result:0.1.0",
+  "$id": "urn:daonhns:schema:thermal-analysis-result:0.3.0",
   "title": "DaonH&S Thermal Anomaly Analysis Result v0",
   "type": "object",
   "additionalProperties": false,
@@ -12,13 +12,14 @@
     "success",
     "completed_at",
     "processing",
+    "detected_candidate_count",
     "candidate_count",
     "candidates",
     "warnings",
     "error"
   ],
   "properties": {
-    "schema_version": { "const": "0.1.0" },
+    "schema_version": { "const": "0.3.0" },
     "job_id":{"type": "string", "pattern": "^JOB-[0-9]{8}-[0-9]{6}$"},
     "monitoring_data_id": { "type": "string", "minLength": 1 },
     "status": { "enum": ["SUCCEEDED", "FAILED"] },
@@ -30,6 +31,7 @@
         { "$ref": "#/$defs/processing" }
       ]
     },
+    "detected_candidate_count": { "type": ["integer", "null"], "minimum": 0 },
     "candidate_count": { "type": "integer", "minimum": 0 },
     "candidates": {
       "type": "array",
@@ -63,9 +65,22 @@
         "properties": {
           "status": { "const": "FAILED" },
           "processing": { "type": "null" },
+          "detected_candidate_count": { "type": "null" },
           "candidate_count": { "const": 0 },
           "candidates": { "maxItems": 0 },
           "error": { "$ref": "#/$defs/message" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "detected_candidate_count": { "type": "integer" } }, "required": ["detected_candidate_count"] },
+      "then": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "properties": { "roi_temperature_c": { "$ref": "#/$defs/roi_temperature" } }
+            }
+          }
         }
       }
     }
@@ -135,12 +150,13 @@
         "parameters": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["score_threshold", "min_area_px", "min_track_frames", "merge_iou_threshold"],
+          "required": ["score_threshold", "min_area_px", "min_track_frames", "merge_iou_threshold", "max_results"],
           "properties": {
             "score_threshold": { "type": "number" },
             "min_area_px": { "type": "integer", "minimum": 1 },
             "min_track_frames": { "type": "integer", "minimum": 1 },
-            "merge_iou_threshold": { "type": "number", "minimum": 0, "maximum": 1 }
+            "merge_iou_threshold": { "type": "number", "minimum": 0, "maximum": 1 },
+            "max_results": { "type": ["integer", "null"], "minimum": 1, "maximum": 1000 }
           }
         },
         "elapsed_seconds": { "type": "number", "minimum": 0 }
@@ -151,7 +167,7 @@
       "additionalProperties": false,
       "required": [
         "candidate_id", "rank", "representative_frame", "captured_at", "gps",
-        "analysis_roi", "candidate_bbox", "temperature_c", "evidence", "result_image"
+        "analysis_roi", "candidate_bbox", "temperature_c", "roi_temperature_c", "evidence", "result_image"
       ],
       "properties": {
         "candidate_id": { "type": "string", "pattern": "^JOB-[0-9]{8}-[0-9]{6}-CAND-[0-9]{4}$" },
@@ -210,12 +226,14 @@
         "result_image": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["format", "width", "height", "path", "grid"],
+          "required": ["format", "width", "height", "path", "sha256", "size_bytes", "grid"],
           "properties": {
             "format": { "const": "PNG" },
             "width": { "type": "integer", "minimum": 1 },
             "height": { "type": "integer", "minimum": 1 },
             "path": { "type": "string", "minLength": 1 },
+            "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "size_bytes": { "type": "integer", "minimum": 1 },
             "grid": {
               "type": "object",
               "additionalProperties": false,

@@ -57,13 +57,14 @@ $env:HEATPIPE_API_TOKEN = Read-Host -MaskInput 'VTI Bearer API key'
 
 - Swagger UI: `http://127.0.0.1:8001/docs`
 - OpenAPI JSON: `http://127.0.0.1:8001/openapi.json`
-- 위 두 주소는 서버 실행 중에 열리는 URL이며 프로젝트 폴더의 파일 경로가 아닙니다. 폴더에서 확인할 수 있는 OpenAPI 명세 사본은 [`docs/openapi.json`](docs/openapi.json)입니다. 코드 변경 후에는 다시 내보내야 합니다.
+- 위 두 주소는 로컬 개발 모드에서 서버 실행 중에 열리는 URL이며 프로젝트 폴더의 파일 경로가 아닙니다. Docker Compose는 `HEATPIPE_ENV=production`으로 실행해 `/docs`, `/redoc`, `/openapi.json`을 제공하지 않습니다. 폴더에서 확인할 수 있는 OpenAPI 명세 사본은 [`docs/openapi.json`](docs/openapi.json)입니다. 코드 변경 후에는 다시 내보내야 합니다.
 - Q15 검토용 PDF는 Windows의 맑은 고딕 글꼴과 선택 의존성 `pip install -e '.[pdf]'`을 준비한 뒤 `python scripts/build_q15_pdf.py`로 생성합니다. 생성된 PDF는 `output/pdf/`에 저장되며 Git에 포함하지 않습니다.
-- `POST /api/v1/analysis-jobs`는 SQLite에 작업을 저장하고 `QUEUED`를 반환합니다. 별도 분석 워커를 시작하면 파일 다운로드와 분석이 진행됩니다.
-- `GET /api/v1/analysis-jobs/{job_id}`는 SQLite에 저장된 상태를 반환합니다. 서버를 재시작해도 접수된 작업이 남습니다.
-- `GET /api/v1/analysis-jobs/{job_id}/results`는 완료 작업의 결과 JSON을 반환합니다. 후보의 `result_image.path`는 같은 API의 PNG 조회 경로입니다. 미완료 작업은 `409 RESULT_NOT_READY`입니다.
-- `GET /api/v1/analysis-jobs/{job_id}/images/{candidate_id}`는 해당 후보 PNG를 `image/png`로 반환합니다. 문서 예시 작업의 PNG 파일은 제공하지 않습니다.
-- `GET /health`, `GET /version`과 문서 화면은 인증 없이 제공합니다. INT-001·003·004 및 PNG 조회에는 `Authorization: Bearer <키>`가 필요합니다. 키가 설정되지 않으면 보호된 API는 `503 AUTH_NOT_CONFIGURED`를 반환합니다. Swagger UI의 **Authorize** 버튼에 키를 입력해 시험할 수 있습니다.
+- `POST /api/v1/analysis-jobs`는 SQLite에 작업을 저장하고 `QUEUED`를 반환합니다. `Idempotency-Key` 헤더를 붙여 같은 요청을 재전송하면 기존 작업 ID를 반환합니다. 별도 분석 워커를 시작하면 파일 다운로드와 분석이 진행됩니다.
+- `GET /api/v1/analysis-jobs/{job_id}`는 SQLite에 저장된 상태·진행률·시도 횟수·취소 요청 여부와 대기 작업의 `queue_position`을 반환합니다. 서버를 재시작해도 접수된 작업이 남습니다.
+- `POST /api/v1/analysis-jobs/{job_id}/cancel`은 대기 작업을 즉시 취소하고 실행 중 작업에는 취소 요청을 기록합니다. 분석 워커가 안전한 중단 지점에 도달하면 `CANCELLED`가 되므로 INT-004로 최종 상태를 확인합니다.
+- `GET /api/v1/analysis-jobs/{job_id}/results`는 완료 작업의 결과 JSON을 반환합니다. 후보의 `result_image.path`는 같은 API의 PNG 조회 경로이며 `sha256`·`size_bytes`로 다운로드한 PNG를 검증할 수 있습니다. 미완료 작업은 `409 RESULT_NOT_READY`입니다.
+- `GET /api/v1/analysis-jobs/{job_id}/images/{candidate_id}`는 해당 후보 PNG를 `image/png`로 반환합니다. 문서 예시 작업에는 `MOCK` 표시가 있는 샘플 PNG를 제공합니다.
+- `GET /health`, `GET /version`은 운영 환경에서도 인증 없이 제공합니다. 로컬 개발 모드의 문서 화면은 인증 없이 열리지만 운영 Compose에서는 비활성화됩니다. `/health`에는 분석 워커 가동 여부·최근 신호 시각·대기 작업 수가 포함됩니다. INT-001·003·004, 작업 취소 및 PNG 조회에는 `Authorization: Bearer <키>`가 필요합니다. 키가 설정되지 않으면 보호된 API는 `503 AUTH_NOT_CONFIGURED`를 반환합니다. 로컬 Swagger UI의 **Authorize** 버튼에 키를 입력해 시험할 수 있습니다.
 
 작업 DB의 기본 위치는 `data/jobs.sqlite3`이며 `HEATPIPE_JOB_DB_PATH` 환경변수로 변경할 수 있습니다. 현재는 단일 서버·단일 분석 워커 구성용입니다. 상세 상태 전이·진행률·재시도 정책은 [docs/JOB_STATE_V0.md](docs/JOB_STATE_V0.md)를 참고하세요. 실행 중인 서버는 새 코드를 반영하려면 재시작해야 합니다.
 

@@ -29,6 +29,8 @@
 | [`CPU_GPU_DOCKER_COMPARISON_2026-11-02.md`](CPU_GPU_DOCKER_COMPARISON_2026-11-02.md) | 비교 기록 | 같은 Docker 환경에서 실제 전체 프레임 CPU·GPU 시간과 결과 비교 |
 | [`HTTPS_URL_LOCAL_TEST_2026-11-02.md`](HTTPS_URL_LOCAL_TEST_2026-11-02.md) | 검증 기록 | 로컬 서명 HTTPS URL의 실제 ATT·ATG 전체 다운로드·오류 처리 |
 | [`Q15_VTI_INTEGRATION_API_DRAFT.md`](Q15_VTI_INTEGRATION_API_DRAFT.md) | VTI 협의용 초안 | Q15 연동 흐름·요청/응답·인증·오류·미확정 정책 |
+| [`Q15_VTI_INTEGRATION_API_FINAL.md`](Q15_VTI_INTEGRATION_API_FINAL.md) | Q15 API 계약 확정본 | VTI 검토 의견 반영, 요청·응답·운영 미확정값 |
+| [`TEST_ENDPOINT_READINESS_2026-11-09.md`](TEST_ENDPOINT_READINESS_2026-11-09.md) | VTI 시험 엔드포인트 준비표 | 서버 담당자 확인값·외부 접속·실제 호출 완료 기준 |
 | [`VTI_INTEGRATION_TEST_CHECKLIST.md`](VTI_INTEGRATION_TEST_CHECKLIST.md) | 시험 준비 목록 | 연동 시험 전 완료·합의·검증할 항목 |
 
 INT-001·003·004의 제안 요청·응답 모델과 OpenAPI는 `src/heatpipe_service/api`에 구현되어 있다. 실행 방법은 [프로젝트 README](../README.md#api-및-openapi)를 참고한다. SQLite 작업 상태, 로컬·선택적 MinIO 저장소와 별도 분석 워커, 완료 작업의 JSON·PNG 조회, Bearer 인증이 구현되어 있다.

@@ -9,7 +9,21 @@ import jsonschema
 import numpy as np
 
 from heatpipe_service.analysis.io import read_att_frame_celsius
-from heatpipe_service.jobs.batch import BatchConfig, BatchProgress, BatchRequest, run_batch, run_batch_safely
+from heatpipe_service.jobs.batch import (
+    BatchConfig, BatchProgress, BatchRequest, _select_tracks_across_frames,
+    run_batch, run_batch_safely,
+)
+
+
+def test_result_cap_spreads_candidates_across_frame_intervals() -> None:
+    ranked = [
+        {"representative_frame": frame, "persistence_score": 100 - index}
+        for index, frame in enumerate([15, 16, 17, 18, 19, 115, 215, 315, 415, 515])
+    ]
+    selected = _select_tracks_across_frames(ranked, 0, 1000, 5)
+    assert [item["representative_frame"] for item in selected] == [15, 16, 215, 315, 415]
+    assert _select_tracks_across_frames(ranked, 0, 1000, 10) == ranked
+    assert BatchConfig().max_results == 50
 
 
 def _write_att(path: Path, frames_c: list[np.ndarray]) -> None:
@@ -70,6 +84,9 @@ def test_batch_writes_schema_valid_json_csv_and_png(tmp_path: Path) -> None:
     assert payload["monitoring_data_id"] == "sample"
     assert payload["candidate_count"] >= 1
     assert payload["candidate_count"] == len(payload["candidates"])
+    assert all(isinstance(item["roi_temperature_c"], dict) for item in payload["candidates"])
+    assert payload["processing"]["parameters"]["max_results"] == 3
+    assert payload["detected_candidate_count"] >= payload["candidate_count"]
     assert payload["processing"]["analysis_roi"] == {"x": 32, "y": 32, "width": 32, "height": 32}
     assert payload["warnings"][0]["code"] == "ATT_ATG_COUNT_MISMATCH"
     assert artifacts.candidates_csv.read_text(encoding="utf-8-sig").startswith("candidate_id,")
@@ -174,6 +191,7 @@ def test_safe_batch_writes_schema_valid_failure_result(tmp_path: Path) -> None:
     assert payload["status"] == "FAILED"
     assert payload["processing"] is None
     assert payload["candidate_count"] == 0
+    assert payload["detected_candidate_count"] is None
     assert payload["error"]["code"] == "INPUT_FILE_NOT_FOUND"
 
 

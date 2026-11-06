@@ -18,6 +18,10 @@ class Message(WireModel):
     message: str
 
 
+class JobError(Message):
+    retryable: bool
+
+
 class ErrorResponse(WireModel):
     error: Message
 
@@ -31,7 +35,11 @@ class Roi(WireModel):
 
 class FileReference(WireModel):
     object_key: str | None = Field(default=None, min_length=1)
-    url: HttpUrl | None = None
+    url: HttpUrl | None = Field(
+        default=None,
+        description=("Presigned GET URL. HTTPS or explicitly allowed internal HTTP and the source host are checked "
+                     "before the job is queued; connectivity and expiry are checked during download."),
+    )
     size_bytes: int | None = Field(default=None, gt=0)
     sha256: str | None = Field(default=None, pattern=r"^[a-fA-F0-9]{64}$")
 
@@ -54,7 +62,7 @@ class RequestedFrameRange(WireModel):
 
 
 class CreateJobRequest(WireModel):
-    monitoring_data_id: str = Field(min_length=1, pattern=r"^[A-Za-z0-9_-]+$")
+    monitoring_data_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
     att: FileReference
     atg: FileReference
     frame_range: RequestedFrameRange = Field(default_factory=RequestedFrameRange)
@@ -78,6 +86,7 @@ class JobStatus(StrEnum):
     UPLOADING = "UPLOADING"
     SUCCEEDED = "SUCCEEDED"
     FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
 
 
 class CreateJobResponse(WireModel):
@@ -88,13 +97,17 @@ class CreateJobResponse(WireModel):
 
 
 class JobStatusResponse(CreateJobResponse):
+    attempt: int = Field(ge=1)
+    max_attempts: int = Field(ge=1)
+    cancel_requested: bool
+    queue_position: int | None = Field(ge=0)
     progress_percent: int = Field(ge=0, le=100)
     processed_frame_count: int = Field(ge=0)
     total_frame_count: int | None = Field(default=None, ge=0)
     status_message: str
     started_at: datetime | None = None
     completed_at: datetime | None = None
-    error: Message | None = None
+    error: JobError | None = None
 
 
 class ProcessingInput(WireModel):
@@ -116,6 +129,7 @@ class AnalysisParameters(WireModel):
     min_area_px: int = Field(ge=1)
     min_track_frames: int = Field(ge=1)
     merge_iou_threshold: float = Field(ge=0, le=1)
+    max_results: int | None = Field(ge=1, le=1000, description="Applied result cap; null for legacy results")
 
 
 class Processing(WireModel):
@@ -169,6 +183,8 @@ class ResultImage(WireModel):
     width: int = Field(ge=1)
     height: int = Field(ge=1)
     path: str = Field(min_length=1, description="Stored object key in batch JSON; relative DaonH&S API image path in INT-001")
+    sha256: str = Field(pattern=r"^[a-f0-9]{64}$", description="SHA-256 of the exact PNG response bytes")
+    size_bytes: int = Field(gt=0, description="Size of the exact PNG response bytes")
     grid: Grid
 
 
@@ -182,21 +198,21 @@ class Candidate(WireModel):
     candidate_bbox: Roi
     temperature_c: Temperature
     roi_temperature_c: RoiTemperature | None = Field(
-        default=None,
-        description="Whole analysis ROI on the candidate's representative ATT frame; absent for older results",
+        description="Required object for newly accepted jobs; null only when reading a legacy stored result",
     )
     evidence: Evidence
     result_image: ResultImage
 
 
 class AnalysisResultResponse(WireModel):
-    schema_version: Literal["0.1.0"]
+    schema_version: Literal["0.3.0"]
     job_id: str = Field(pattern=r"^JOB-[0-9]{8}-[0-9]{6}$")
     monitoring_data_id: str = Field(min_length=1)
     status: Literal["SUCCEEDED", "FAILED"]
     success: bool
     completed_at: datetime
     processing: Processing | None
+    detected_candidate_count: int | None = Field(ge=0, description="Eligible tracks before max_results; null for failed or legacy results")
     candidate_count: int = Field(ge=0)
     candidates: list[Candidate]
     warnings: list[Message]
@@ -206,9 +222,20 @@ class AnalysisResultResponse(WireModel):
     def check_result_consistency(self) -> AnalysisResultResponse:
         if self.candidate_count != len(self.candidates):
             raise ValueError("candidate_count must match candidates")
+        if self.detected_candidate_count is not None and self.detected_candidate_count < self.candidate_count:
+            raise ValueError("detected_candidate_count must be at least candidate_count")
         if self.success:
             if self.status != "SUCCEEDED" or self.processing is None or self.error is not None:
                 raise ValueError("successful result requires processing and no error")
+            if (self.detected_candidate_count is not None
+                    and any(candidate.roi_temperature_c is None for candidate in self.candidates)):
+                raise ValueError("new successful results require roi_temperature_c for every candidate")
+            if (self.detected_candidate_count is not None
+                    and self.processing.parameters.max_results is not None
+                    and self.candidate_count != min(
+                        self.detected_candidate_count, self.processing.parameters.max_results
+                    )):
+                raise ValueError("candidate_count must reflect the applied result cap")
         elif self.status != "FAILED" or self.processing is not None or self.candidates or self.error is None:
             raise ValueError("failed result requires error and no processing or candidates")
         return self
@@ -216,6 +243,9 @@ class AnalysisResultResponse(WireModel):
 
 class HealthResponse(WireModel):
     status: Literal["ok"] = "ok"
+    worker_running: bool
+    worker_last_activity_at: datetime | None
+    queued_job_count: int = Field(ge=0)
 
 
 class VersionResponse(WireModel):

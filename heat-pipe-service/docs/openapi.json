@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Heat Pipe Service API",
-    "description": "Proposed INT-001/003/004 contract. The worker produces results; INT-001 returns JSON and candidate PNG URLs served by this API.",
+    "description": "Q15 INT-001/003/004 analysis API. The analysis worker produces results; this API provides job status, cancellation, result JSON and candidate PNG files.",
     "version": "0.1.0"
   },
   "paths": {
@@ -55,15 +55,43 @@
         ],
         "summary": "Request thermal analysis",
         "operationId": "create_job_api_v1_analysis_jobs_post",
+        "security": [
+          {
+            "VtiBearerApiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 255,
+                  "pattern": "^[!-~]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional request key. The same key, monitoring_data_id, and ATT/ATG size_bytes and sha256 return the existing job even when Presigned URLs change. A different comparison value returns 409.",
+              "title": "Idempotency-Key"
+            },
+            "description": "Optional request key. The same key, monitoring_data_id, and ATT/ATG size_bytes and sha256 return the existing job even when Presigned URLs change. A different comparison value returns 409."
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/CreateJobRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "202": {
@@ -77,41 +105,134 @@
             }
           },
           "401": {
-            "description": "Unauthorized",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
-            }
+            },
+            "description": "Unauthorized"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
           },
           "422": {
-            "description": "Unprocessable Entity",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
-            }
+            },
+            "description": "Unprocessable Content"
           },
           "503": {
-            "description": "Service Unavailable",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
-            }
+            },
+            "description": "Service Unavailable"
           }
-        },
+        }
+      }
+    },
+    "/api/v1/analysis-jobs/{job_id}/cancel": {
+      "post": {
+        "tags": [
+          "INT-004"
+        ],
+        "summary": "Cancel a queued or running analysis job",
+        "description": "A queued job becomes CANCELLED immediately. A running job reports cancel_requested=true until the worker reaches a cancellation checkpoint.",
+        "operationId": "cancel_job_api_v1_analysis_jobs__job_id__cancel_post",
         "security": [
           {
             "VtiBearerApiKey": []
           }
-        ]
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
       }
     },
     "/api/v1/analysis-jobs/{job_id}": {
@@ -168,6 +289,16 @@
             },
             "description": "Not Found"
           },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
           "503": {
             "content": {
               "application/json": {
@@ -177,16 +308,6 @@
               }
             },
             "description": "Service Unavailable"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
         }
       }
@@ -197,6 +318,7 @@
           "INT-001"
         ],
         "summary": "Get completed analysis result",
+        "description": "A job becomes SUCCEEDED only after every candidate PNG is uploaded and verified.",
         "operationId": "get_results_api_v1_analysis_jobs__job_id__results_get",
         "security": [
           {
@@ -255,6 +377,16 @@
             },
             "description": "Conflict"
           },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
           "503": {
             "content": {
               "application/json": {
@@ -264,16 +396,6 @@
               }
             },
             "description": "Service Unavailable"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
         }
       }
@@ -284,6 +406,7 @@
           "INT-001"
         ],
         "summary": "Get a candidate result PNG",
+        "description": "All candidates in a SUCCEEDED result have a PNG verified at job completion. Later storage failures return 503.",
         "operationId": "get_image_api_v1_analysis_jobs__job_id__images__candidate_id__get",
         "security": [
           {
@@ -316,14 +439,15 @@
             "content": {
               "image/png": {
                 "schema": {
-                  "type": "string"
+                  "type": "string",
+                  "format": "binary"
                 }
               }
             }
           },
           "401": {
             "content": {
-              "image/png": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
                 }
@@ -333,7 +457,7 @@
           },
           "404": {
             "content": {
-              "image/png": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
                 }
@@ -343,7 +467,7 @@
           },
           "409": {
             "content": {
-              "image/png": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
                 }
@@ -351,25 +475,25 @@
             },
             "description": "Conflict"
           },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
           "503": {
             "content": {
-              "image/png": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
             "description": "Service Unavailable"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
           }
         }
       }
@@ -398,6 +522,20 @@
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "Merge Iou Threshold"
+          },
+          "max_results": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1000.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Results",
+            "description": "Applied result cap; null for legacy results"
           }
         },
         "additionalProperties": false,
@@ -406,7 +544,8 @@
           "score_threshold",
           "min_area_px",
           "min_track_frames",
-          "merge_iou_threshold"
+          "merge_iou_threshold",
+          "max_results"
         ],
         "title": "AnalysisParameters"
       },
@@ -414,7 +553,7 @@
         "properties": {
           "schema_version": {
             "type": "string",
-            "const": "0.1.0",
+            "const": "0.3.0",
             "title": "Schema Version"
           },
           "job_id": {
@@ -453,6 +592,19 @@
                 "type": "null"
               }
             ]
+          },
+          "detected_candidate_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detected Candidate Count",
+            "description": "Eligible tracks before max_results; null for failed or legacy results"
           },
           "candidate_count": {
             "type": "integer",
@@ -494,6 +646,7 @@
           "success",
           "completed_at",
           "processing",
+          "detected_candidate_count",
           "candidate_count",
           "candidates",
           "warnings",
@@ -558,7 +711,7 @@
                 "type": "null"
               }
             ],
-            "description": "Whole analysis ROI on the candidate's representative ATT frame; absent for older results"
+            "description": "Required object for newly accepted jobs; null only when reading a legacy stored result"
           },
           "evidence": {
             "$ref": "#/components/schemas/Evidence"
@@ -578,6 +731,7 @@
           "analysis_roi",
           "candidate_bbox",
           "temperature_c",
+          "roi_temperature_c",
           "evidence",
           "result_image"
         ],
@@ -587,6 +741,7 @@
         "properties": {
           "monitoring_data_id": {
             "type": "string",
+            "maxLength": 128,
             "minLength": 1,
             "pattern": "^[A-Za-z0-9_-]+$",
             "title": "Monitoring Data Id"
@@ -745,7 +900,8 @@
                 "type": "null"
               }
             ],
-            "title": "Url"
+            "title": "Url",
+            "description": "Presigned GET URL. HTTPS or explicitly allowed internal HTTP and the source host are checked before the job is queued; connectivity and expiry are checked during download."
           },
           "size_bytes": {
             "anyOf": [
@@ -818,19 +974,6 @@
         "type": "object",
         "title": "Grid"
       },
-      "HTTPValidationError": {
-        "properties": {
-          "detail": {
-            "items": {
-              "$ref": "#/components/schemas/ValidationError"
-            },
-            "type": "array",
-            "title": "Detail"
-          }
-        },
-        "type": "object",
-        "title": "HTTPValidationError"
-      },
       "HealthResponse": {
         "properties": {
           "status": {
@@ -838,11 +981,61 @@
             "const": "ok",
             "title": "Status",
             "default": "ok"
+          },
+          "worker_running": {
+            "type": "boolean",
+            "title": "Worker Running"
+          },
+          "worker_last_activity_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Last Activity At"
+          },
+          "queued_job_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Queued Job Count"
           }
         },
         "additionalProperties": false,
         "type": "object",
+        "required": [
+          "worker_running",
+          "worker_last_activity_at",
+          "queued_job_count"
+        ],
         "title": "HealthResponse"
+      },
+      "JobError": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "retryable": {
+            "type": "boolean",
+            "title": "Retryable"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "retryable"
+        ],
+        "title": "JobError"
       },
       "JobStatus": {
         "type": "string",
@@ -854,7 +1047,8 @@
           "RENDERING",
           "UPLOADING",
           "SUCCEEDED",
-          "FAILED"
+          "FAILED",
+          "CANCELLED"
         ],
         "title": "JobStatus"
       },
@@ -875,6 +1069,32 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "attempt": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Attempt"
+          },
+          "max_attempts": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Max Attempts"
+          },
+          "cancel_requested": {
+            "type": "boolean",
+            "title": "Cancel Requested"
+          },
+          "queue_position": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queue Position"
           },
           "progress_percent": {
             "type": "integer",
@@ -930,7 +1150,7 @@
           "error": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Message"
+                "$ref": "#/components/schemas/JobError"
               },
               {
                 "type": "null"
@@ -945,6 +1165,10 @@
           "monitoring_data_id",
           "status",
           "created_at",
+          "attempt",
+          "max_attempts",
+          "cancel_requested",
+          "queue_position",
           "progress_percent",
           "processed_frame_count",
           "status_message"
@@ -1124,6 +1348,18 @@
             "title": "Path",
             "description": "Stored object key in batch JSON; relative DaonH&S API image path in INT-001"
           },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "description": "SHA-256 of the exact PNG response bytes"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Size Bytes",
+            "description": "Size of the exact PNG response bytes"
+          },
           "grid": {
             "$ref": "#/components/schemas/Grid"
           }
@@ -1134,6 +1370,8 @@
           "width",
           "height",
           "path",
+          "sha256",
+          "size_bytes",
           "grid"
         ],
         "title": "ResultImage"
@@ -1238,46 +1476,6 @@
           "delta_from_background"
         ],
         "title": "Temperature"
-      },
-      "ValidationError": {
-        "properties": {
-          "loc": {
-            "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                }
-              ]
-            },
-            "type": "array",
-            "title": "Location"
-          },
-          "msg": {
-            "type": "string",
-            "title": "Message"
-          },
-          "type": {
-            "type": "string",
-            "title": "Error Type"
-          },
-          "input": {
-            "title": "Input"
-          },
-          "ctx": {
-            "type": "object",
-            "title": "Context"
-          }
-        },
-        "type": "object",
-        "required": [
-          "loc",
-          "msg",
-          "type"
-        ],
-        "title": "ValidationError"
       },
       "VersionResponse": {
         "properties": {

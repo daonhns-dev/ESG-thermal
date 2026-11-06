@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.1.0",
+  "schema_version": "0.3.0",
   "job_id": "JOB-20261030-000001",
   "monitoring_data_id": "20260813_132634",
   "status": "SUCCEEDED",
@@ -19,10 +19,10 @@
       "processed_frame_count": 3959
     },
     "analysis_roi": {
-      "x": 0,
-      "y": 158,
-      "width": 384,
-      "height": 130
+      "x": 128,
+      "y": 144,
+      "width": 128,
+      "height": 144
     },
     "algorithms": [
       "robust_zscore",
@@ -33,10 +33,12 @@
       "score_threshold": 3.0,
       "min_area_px": 20,
       "min_track_frames": 3,
-      "merge_iou_threshold": 0.35
+      "merge_iou_threshold": 0.35,
+      "max_results": 50
     },
     "elapsed_seconds": 125.42
   },
+  "detected_candidate_count": 1,
   "candidate_count": 1,
   "candidates": [
     {
@@ -46,13 +48,13 @@
       "captured_at": "2026-08-13T13:29:54+09:00",
       "gps": {
         "latitude": 37.5761,
-        "longitude": 126.8170
+        "longitude": 126.817
       },
       "analysis_roi": {
-        "x": 0,
-        "y": 158,
-        "width": 384,
-        "height": 130
+        "x": 128,
+        "y": 144,
+        "width": 128,
+        "height": 144
       },
       "candidate_bbox": {
         "x": 149,
@@ -66,6 +68,13 @@
         "maximum": 68.27,
         "background_median": 45.91,
         "delta_from_background": 22.36
+      },
+      "roi_temperature_c": {
+        "minimum": 36.44,
+        "mean": 40.0,
+        "maximum": 68.27,
+        "max_minus_min": 31.83,
+        "max_minus_mean": 28.27
       },
       "evidence": {
         "algorithms": [
@@ -84,8 +93,13 @@
         "format": "PNG",
         "width": 384,
         "height": 288,
-        "path": "images/20260813_132634_JOB-20261030-000001-CAND-0001_f000120.png",
-        "grid": {"rows": 2, "columns": 3}
+        "path": "/api/v1/analysis-jobs/JOB-20261030-000001/images/JOB-20261030-000001-CAND-0001",
+        "grid": {
+          "rows": 2,
+          "columns": 3
+        },
+        "sha256": "35433736742f9b2b7500ce29f1710cb79da4ed74d8d2f9fd2fc2d64191370f9f",
+        "size_bytes": 8734
       }
     }
   ],

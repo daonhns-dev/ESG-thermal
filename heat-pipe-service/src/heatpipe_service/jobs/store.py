@@ -12,12 +12,13 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Iterator
 
-from heatpipe_service.api.models import CreateJobRequest, JobStatus, JobStatusResponse, Message
+from heatpipe_service.api.models import CreateJobRequest, JobError, JobStatus, JobStatusResponse, Message
 
 if TYPE_CHECKING:
     from heatpipe_service.jobs.batch import BatchProgress
 
 MAX_ATTEMPTS = 3
+WORKER_STALE_AFTER_SECONDS = 30
 RETRYABLE_ERROR_CODES = frozenset({
     "INPUT_OUTPUT_ERROR", "DOWNLOAD_FAILED", "UPLOAD_FAILED", "ANALYSIS_TIMEOUT",
     "WORKER_INTERRUPTED",
@@ -40,12 +41,27 @@ class JobNotFound(LookupError):
     pass
 
 
+class IdempotencyConflict(ValueError):
+    """An idempotency key was already used for a different request."""
+
+
 class InvalidJobUpdate(ValueError):
     pass
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _idempotency_identity(request: CreateJobRequest) -> tuple[object, ...]:
+    """Identify input content, ignoring short-lived source locations."""
+    return (
+        request.monitoring_data_id,
+        request.att.size_bytes,
+        request.att.sha256.lower() if request.att.sha256 else None,
+        request.atg.size_bytes,
+        request.atg.sha256.lower() if request.atg.sha256 else None,
+    )
 
 
 class JobStore:
@@ -58,6 +74,7 @@ class JobStore:
                 CREATE TABLE IF NOT EXISTS jobs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     job_id TEXT UNIQUE,
+                    idempotency_key TEXT,
                     monitoring_data_id TEXT NOT NULL,
                     request_json TEXT NOT NULL,
                     status TEXT NOT NULL,
@@ -73,7 +90,8 @@ class JobStore:
                     attempt INTEGER NOT NULL DEFAULT 1,
                     max_attempts INTEGER NOT NULL DEFAULT 3,
                     result_key TEXT,
-                    next_attempt_at TEXT
+                    next_attempt_at TEXT,
+                    cancel_requested INTEGER NOT NULL DEFAULT 0
                 )
             """)
             columns = {row["name"] for row in db.execute("PRAGMA table_info(jobs)")}
@@ -81,6 +99,18 @@ class JobStore:
                 db.execute("ALTER TABLE jobs ADD COLUMN result_key TEXT")
             if "next_attempt_at" not in columns:
                 db.execute("ALTER TABLE jobs ADD COLUMN next_attempt_at TEXT")
+            if "idempotency_key" not in columns:
+                db.execute("ALTER TABLE jobs ADD COLUMN idempotency_key TEXT")
+            if "cancel_requested" not in columns:
+                db.execute("ALTER TABLE jobs ADD COLUMN cancel_requested INTEGER NOT NULL DEFAULT 0")
+            db.execute("""CREATE UNIQUE INDEX IF NOT EXISTS jobs_idempotency_key_unique
+                          ON jobs (idempotency_key) WHERE idempotency_key IS NOT NULL""")
+            db.execute("CREATE INDEX IF NOT EXISTS jobs_queue_order ON jobs (status, id)")
+            db.execute("""CREATE TABLE IF NOT EXISTS worker_heartbeats (
+                worker_id TEXT PRIMARY KEY,
+                last_activity_at TEXT NOT NULL,
+                stopped_at TEXT
+            )""")
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -93,28 +123,128 @@ class JobStore:
         finally:
             db.close()
 
-    def create(self, request: CreateJobRequest) -> JobStatusResponse:
+    def create(self, request: CreateJobRequest, idempotency_key: str | None = None) -> JobStatusResponse:
         now = _now()
+        request_json = request.model_dump_json()
         with self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
-            cursor = db.execute(
-                """INSERT INTO jobs (
-                    monitoring_data_id, request_json, status, progress_percent,
-                    processed_frame_count, status_message, created_at, max_attempts
-                ) VALUES (?, ?, ?, 0, 0, ?, ?, ?)""",
-                (request.monitoring_data_id, request.model_dump_json(), JobStatus.QUEUED,
-                 "Accepted; waiting for analysis worker", now, MAX_ATTEMPTS),
-            )
-            job_id = f"JOB-{datetime.fromisoformat(now):%Y%m%d}-{cursor.lastrowid:06d}"
-            db.execute("UPDATE jobs SET job_id = ? WHERE id = ?", (job_id, cursor.lastrowid))
+            if idempotency_key is not None:
+                existing = db.execute(
+                    "SELECT job_id, request_json, status FROM jobs WHERE idempotency_key = ?",
+                    (idempotency_key,),
+                ).fetchone()
+            else:
+                existing = None
+            if existing is not None:
+                original = CreateJobRequest.model_validate_json(existing["request_json"])
+                if _idempotency_identity(original) != _idempotency_identity(request):
+                    raise IdempotencyConflict("Idempotency-Key was already used for a different request")
+                job_id = existing["job_id"]
+                if existing["status"] == JobStatus.QUEUED:
+                    if original.att.url is not None and request.att.url is not None:
+                        original.att.url = request.att.url
+                    if original.atg.url is not None and request.atg.url is not None:
+                        original.atg.url = request.atg.url
+                    db.execute("UPDATE jobs SET request_json=? WHERE job_id=?",
+                               (original.model_dump_json(), job_id))
+            else:
+                cursor = db.execute(
+                    """INSERT INTO jobs (
+                        idempotency_key, monitoring_data_id, request_json, status, progress_percent,
+                        processed_frame_count, status_message, created_at, max_attempts
+                    ) VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?)""",
+                    (idempotency_key, request.monitoring_data_id, request_json, JobStatus.QUEUED,
+                     "Accepted; waiting for analysis worker", now, MAX_ATTEMPTS),
+                )
+                job_id = f"JOB-{datetime.fromisoformat(now):%Y%m%d}-{cursor.lastrowid:06d}"
+                db.execute("UPDATE jobs SET job_id = ? WHERE id = ?", (job_id, cursor.lastrowid))
         return self.get(job_id)
 
     def get(self, job_id: str) -> JobStatusResponse:
         with self._connect() as db:
+            db.execute("BEGIN")
             row = db.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
+            queue_position = (
+                db.execute("SELECT COUNT(*) FROM jobs WHERE status=? AND id<?",
+                           (JobStatus.QUEUED, row["id"])).fetchone()[0]
+                if row is not None and row["status"] == JobStatus.QUEUED else None
+            )
         if row is None:
             raise JobNotFound(job_id)
-        return self._status(row)
+        return self._status(row, queue_position)
+
+    def cancel(self, job_id: str) -> JobStatusResponse:
+        """Cancel a queued job immediately or signal an active worker to stop."""
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT * FROM jobs WHERE job_id=?", (job_id,)).fetchone()
+            if row is None:
+                raise JobNotFound(job_id)
+            status = JobStatus(row["status"])
+            if status == JobStatus.CANCELLED:
+                return self._status(row)
+            if status == JobStatus.QUEUED or (
+                status == JobStatus.FAILED and row["attempt"] < row["max_attempts"]
+                and row["error_code"] in RETRYABLE_ERROR_CODES
+            ):
+                db.execute("""UPDATE jobs SET status=?, cancel_requested=1,
+                    status_message=?, completed_at=?, next_attempt_at=NULL,
+                    error_code=NULL, error_message=NULL, result_key=NULL WHERE job_id=?""",
+                    (JobStatus.CANCELLED, "Cancelled by request", _now(), job_id))
+            elif status in ACTIVE:
+                db.execute("""UPDATE jobs SET cancel_requested=1, status_message=?
+                    WHERE job_id=?""", ("Cancellation requested", job_id))
+            else:
+                raise InvalidJobUpdate("completed job cannot be cancelled")
+        return self.get(job_id)
+
+    def cancellation_requested(self, job_id: str) -> bool:
+        with self._connect() as db:
+            row = db.execute("SELECT cancel_requested FROM jobs WHERE job_id=?", (job_id,)).fetchone()
+        if row is None:
+            raise JobNotFound(job_id)
+        return bool(row["cancel_requested"])
+
+    def finish_cancel(self, job_id: str) -> JobStatusResponse:
+        """Complete cancellation after the worker has stopped using the job."""
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT status, cancel_requested FROM jobs WHERE job_id=?", (job_id,)).fetchone()
+            if row is None:
+                raise JobNotFound(job_id)
+            if row["status"] == JobStatus.CANCELLED:
+                pass
+            elif not row["cancel_requested"] or row["status"] not in ACTIVE | {JobStatus.FAILED}:
+                raise InvalidJobUpdate("job has no pending cancellation")
+            else:
+                db.execute("""UPDATE jobs SET status=?, status_message=?, completed_at=?,
+                    next_attempt_at=NULL, result_key=NULL, error_code=NULL, error_message=NULL
+                    WHERE job_id=?""", (JobStatus.CANCELLED, "Cancelled by request", _now(), job_id))
+        return self.get(job_id)
+
+    def record_worker_activity(self, worker_id: str) -> None:
+        now = _now()
+        with self._connect() as db:
+            db.execute("""INSERT INTO worker_heartbeats (worker_id, last_activity_at, stopped_at)
+                          VALUES (?, ?, NULL)
+                          ON CONFLICT(worker_id) DO UPDATE SET
+                          last_activity_at=excluded.last_activity_at, stopped_at=NULL""",
+                       (worker_id, now))
+
+    def stop_worker(self, worker_id: str) -> None:
+        with self._connect() as db:
+            db.execute("UPDATE worker_heartbeats SET stopped_at=? WHERE worker_id=?", (_now(), worker_id))
+
+    def worker_health(self) -> tuple[bool, datetime | None, int]:
+        with self._connect() as db:
+            active = db.execute("""SELECT last_activity_at FROM worker_heartbeats
+                                   WHERE stopped_at IS NULL ORDER BY last_activity_at DESC LIMIT 1""").fetchone()
+            last = db.execute("SELECT MAX(last_activity_at) FROM worker_heartbeats").fetchone()[0]
+            queued = db.execute("SELECT COUNT(*) FROM jobs WHERE status=?", (JobStatus.QUEUED,)).fetchone()[0]
+        last_activity_at = datetime.fromisoformat(last) if last else None
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=WORKER_STALE_AFTER_SECONDS)
+        running = active is not None and datetime.fromisoformat(active["last_activity_at"]) >= cutoff
+        return running, last_activity_at, queued
 
     def get_request(self, job_id: str) -> CreateJobRequest:
         with self._connect() as db:
@@ -159,6 +289,12 @@ class JobStore:
         """Mark abandoned in-progress jobs failed after a single-process server restart."""
         with self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
+            cancelled = db.execute(
+                f"""UPDATE jobs SET status=?, completed_at=?, status_message=?,
+                    next_attempt_at=NULL, result_key=NULL, error_code=NULL, error_message=NULL
+                    WHERE cancel_requested=1 AND status IN ({','.join('?' for _ in ACTIVE)})""",
+                (JobStatus.CANCELLED, _now(), "Cancelled by request", *ACTIVE),
+            ).rowcount
             cursor = db.execute(
                 f"""UPDATE jobs SET status=?, completed_at=?, error_code=?, error_message=?,
                     status_message=? WHERE status IN ({','.join('?' for _ in ACTIVE)})""",
@@ -166,7 +302,24 @@ class JobStore:
                  "Analysis worker stopped before completion", "Analysis worker interrupted",
                  *ACTIVE),
             )
-            return cursor.rowcount
+            return cancelled + cursor.rowcount
+
+    def requeue_pending_retries(self) -> int:
+        """Resume retryable failures left behind by an interrupted worker."""
+        with self._connect() as db:
+            rows = db.execute(
+                f"""SELECT job_id FROM jobs WHERE status=? AND attempt<max_attempts
+                    AND error_code IN ({','.join('?' for _ in RETRYABLE_ERROR_CODES)})""",
+                (JobStatus.FAILED, *sorted(RETRYABLE_ERROR_CODES)),
+            ).fetchall()
+        resumed = 0
+        for row in rows:
+            try:
+                self.retry_failed(row["job_id"])
+            except InvalidJobUpdate:
+                continue
+            resumed += 1
+        return resumed
 
     def update(
         self,
@@ -193,8 +346,10 @@ class JobStore:
                 raise InvalidJobUpdate("only active jobs can report repeated progress")
             if status != previous and status not in allowed:
                 raise InvalidJobUpdate(f"invalid transition: {previous} -> {status}")
-            if previous in {JobStatus.SUCCEEDED, JobStatus.FAILED}:
+            if previous in {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELLED}:
                 raise InvalidJobUpdate("terminal job cannot be updated")
+            if row["cancel_requested"] and status == JobStatus.SUCCEEDED:
+                raise InvalidJobUpdate("cancellation requested")
             if progress_percent < row["progress_percent"] or processed_frame_count < row["processed_frame_count"]:
                 raise InvalidJobUpdate("progress cannot decrease")
             if row["total_frame_count"] is not None and total_frame_count != row["total_frame_count"]:
@@ -224,7 +379,7 @@ class JobStore:
             if row is None:
                 raise JobNotFound(job_id)
             if (row["status"] != JobStatus.FAILED or row["error_code"] not in RETRYABLE_ERROR_CODES
-                    or row["attempt"] >= row["max_attempts"]):
+                    or row["attempt"] >= row["max_attempts"] or row["cancel_requested"]):
                 raise InvalidJobUpdate("job is not eligible for retry")
             db.execute("""UPDATE jobs SET status=?, progress_percent=0, processed_frame_count=0,
                 total_frame_count=NULL, status_message=?, started_at=NULL, completed_at=NULL,
@@ -255,12 +410,16 @@ class JobStore:
         return record
 
     @staticmethod
-    def _status(row: sqlite3.Row) -> JobStatusResponse:
-        error = (Message(code=row["error_code"], message=row["error_message"])
+    def _status(row: sqlite3.Row, queue_position: int | None = None) -> JobStatusResponse:
+        error = (JobError(code=row["error_code"], message=row["error_message"],
+                          retryable=row["error_code"] in RETRYABLE_ERROR_CODES)
                  if row["error_code"] is not None else None)
         return JobStatusResponse(
             job_id=row["job_id"], monitoring_data_id=row["monitoring_data_id"],
-            status=row["status"], progress_percent=row["progress_percent"],
+            status=row["status"], attempt=row["attempt"], max_attempts=row["max_attempts"],
+            cancel_requested=bool(row["cancel_requested"]),
+            queue_position=queue_position,
+            progress_percent=row["progress_percent"],
             processed_frame_count=row["processed_frame_count"],
             total_frame_count=row["total_frame_count"], status_message=row["status_message"],
             created_at=row["created_at"], started_at=row["started_at"],

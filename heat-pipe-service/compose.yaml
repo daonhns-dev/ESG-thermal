@@ -1,6 +1,7 @@
 name: heatpipe-service
 
 x-heatpipe-environment: &heatpipe-environment
+  HEATPIPE_ENV: production
   HEATPIPE_API_TOKEN: ${HEATPIPE_API_TOKEN:?Set HEATPIPE_API_TOKEN in .env}
   HEATPIPE_JOB_DB_PATH: /data/jobs.sqlite3
   HEATPIPE_STORAGE: local
@@ -8,6 +9,7 @@ x-heatpipe-environment: &heatpipe-environment
   HEATPIPE_WORK_ROOT: /data/work
   HEATPIPE_ANALYSIS_DEVICE: cpu
   HEATPIPE_ALLOWED_SOURCE_HOSTS: ${HEATPIPE_ALLOWED_SOURCE_HOSTS:-}
+  HEATPIPE_ALLOWED_INTERNAL_HTTP_HOSTS: ${HEATPIPE_ALLOWED_INTERNAL_HTTP_HOSTS:-}
 
 services:
   api:

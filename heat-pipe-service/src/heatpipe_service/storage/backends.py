@@ -7,10 +7,11 @@ import os
 import shutil
 import urllib.request
 from pathlib import Path, PurePosixPath
-from typing import Protocol
+from typing import Callable, Protocol
 from urllib.parse import urlparse
 
 from heatpipe_service.api.models import FileReference
+from heatpipe_service.cancellation import JobCancelled
 
 
 class StorageError(Exception):
@@ -39,10 +40,30 @@ def verify_file(path: Path, reference: FileReference) -> None:
             raise StorageError("FILE_INTEGRITY_ERROR", "SHA-256 does not match the request")
 
 
-def _download_url(url: str, destination: Path, allowed_hosts: frozenset[str]) -> None:
+def validate_source_url(
+    url: str, allowed_hosts: frozenset[str], allowed_http_hosts: frozenset[str] = frozenset()
+) -> None:
     parsed = urlparse(url)
-    if parsed.hostname not in allowed_hosts or parsed.scheme != "https":
-        raise StorageError("SOURCE_URL_NOT_ALLOWED", "HTTPS source host is not allowed")
+    if not ((parsed.scheme == "https" and parsed.hostname in allowed_hosts)
+            or (parsed.scheme == "http" and parsed.hostname in allowed_http_hosts)):
+        raise StorageError("SOURCE_URL_NOT_ALLOWED", "Source URL scheme or host is not allowed")
+
+
+def _copy_chunks(source, destination: Path, should_cancel: Callable[[], bool] | None) -> None:
+    with destination.open("wb") as output:
+        while True:
+            if should_cancel and should_cancel():
+                raise JobCancelled()
+            chunk = source.read(1024 * 1024)
+            if not chunk:
+                break
+            output.write(chunk)
+
+
+def _download_url(url: str, destination: Path, allowed_hosts: frozenset[str],
+                  allowed_http_hosts: frozenset[str] = frozenset(),
+                  should_cancel: Callable[[], bool] | None = None) -> None:
+    validate_source_url(url, allowed_hosts, allowed_http_hosts)
 
     class NoRedirect(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, *_args, **_kwargs):
@@ -51,23 +72,28 @@ def _download_url(url: str, destination: Path, allowed_hosts: frozenset[str]) ->
     try:
         request = urllib.request.Request(url, method="GET")
         with urllib.request.build_opener(NoRedirect).open(request, timeout=30) as response:
-            with destination.open("wb") as output:
-                shutil.copyfileobj(response, output, length=1024 * 1024)
+            _copy_chunks(response, destination, should_cancel)
+    except JobCancelled:
+        raise
     except Exception as error:
         raise StorageError("DOWNLOAD_FAILED", "Could not download source URL") from error
 
 
 class Storage(Protocol):
-    def fetch(self, reference: FileReference, destination: Path) -> None: ...
+    def fetch(self, reference: FileReference, destination: Path,
+              should_cancel: Callable[[], bool] | None = None) -> None: ...
     def put(self, source: Path, object_key: str) -> str: ...
     def read_bytes(self, object_key: str) -> bytes: ...
+    def delete(self, object_key: str) -> None: ...
 
 
 class LocalStorage:
-    def __init__(self, root: Path | str, allowed_url_hosts: frozenset[str] = frozenset()) -> None:
+    def __init__(self, root: Path | str, allowed_url_hosts: frozenset[str] = frozenset(),
+                 allowed_http_hosts: frozenset[str] = frozenset()) -> None:
         self.root = Path(root).resolve()
         self.root.mkdir(parents=True, exist_ok=True)
         self.allowed_url_hosts = allowed_url_hosts
+        self.allowed_http_hosts = allowed_http_hosts
 
     def _path(self, object_key: str) -> Path:
         path = (self.root / validate_key(object_key)).resolve()
@@ -75,7 +101,8 @@ class LocalStorage:
             raise StorageError("INVALID_OBJECT_KEY", "Object key escapes storage root")
         return path
 
-    def fetch(self, reference: FileReference, destination: Path) -> None:
+    def fetch(self, reference: FileReference, destination: Path,
+              should_cancel: Callable[[], bool] | None = None) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)
         temporary = destination.with_name(destination.name + ".download")
         try:
@@ -83,9 +110,13 @@ class LocalStorage:
                 source = self._path(reference.object_key)
                 if not source.is_file():
                     raise StorageError("INPUT_FILE_NOT_FOUND", "Referenced input file was not found")
-                shutil.copyfile(source, temporary)
+                with source.open("rb") as stream:
+                    _copy_chunks(stream, temporary, should_cancel)
             else:
-                _download_url(str(reference.url), temporary, self.allowed_url_hosts)
+                _download_url(str(reference.url), temporary, self.allowed_url_hosts,
+                              self.allowed_http_hosts, should_cancel)
+            if should_cancel and should_cancel():
+                raise JobCancelled()
             verify_file(temporary, reference)
             temporary.replace(destination)
         finally:
@@ -108,12 +139,16 @@ class LocalStorage:
             raise StorageError("RESULT_NOT_FOUND", "Result object was not found")
         return path.read_bytes()
 
+    def delete(self, object_key: str) -> None:
+        self._path(object_key).unlink(missing_ok=True)
+
 
 class MinioStorage:
     def __init__(
         self, bucket: str, endpoint: str | None = None, access_key: str | None = None,
         secret_key: str | None = None, secure: bool = True,
         allowed_url_hosts: frozenset[str] = frozenset(), client: object | None = None,
+        allowed_http_hosts: frozenset[str] = frozenset(),
     ) -> None:
         if client is None:
             try:
@@ -126,22 +161,33 @@ class MinioStorage:
         self.client = client
         self.bucket = bucket
         self.allowed_url_hosts = allowed_url_hosts
+        self.allowed_http_hosts = allowed_http_hosts
 
-    def fetch(self, reference: FileReference, destination: Path) -> None:
+    def fetch(self, reference: FileReference, destination: Path,
+              should_cancel: Callable[[], bool] | None = None) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)
         temporary = destination.with_name(destination.name + ".download")
         try:
             if reference.object_key is not None:
+                if should_cancel and should_cancel():
+                    raise JobCancelled()
                 try:
-                    self.client.fget_object(
-                        bucket_name=self.bucket,
-                        object_name=validate_key(reference.object_key),
-                        file_path=str(temporary),
-                    )
+                    response = self.client.get_object(
+                        bucket_name=self.bucket, object_name=validate_key(reference.object_key))
+                    try:
+                        _copy_chunks(response, temporary, should_cancel)
+                    finally:
+                        response.close()
+                        response.release_conn()
+                except JobCancelled:
+                    raise
                 except Exception as error:
                     raise StorageError("DOWNLOAD_FAILED", "Could not download MinIO object") from error
             else:
-                _download_url(str(reference.url), temporary, self.allowed_url_hosts)
+                _download_url(str(reference.url), temporary, self.allowed_url_hosts,
+                              self.allowed_http_hosts, should_cancel)
+            if should_cancel and should_cancel():
+                raise JobCancelled()
             verify_file(temporary, reference)
             temporary.replace(destination)
         finally:
@@ -166,12 +212,19 @@ class MinioStorage:
         except Exception as error:
             raise StorageError("RESULT_NOT_FOUND", "Could not read MinIO result object") from error
 
+    def delete(self, object_key: str) -> None:
+        try:
+            self.client.remove_object(bucket_name=self.bucket, object_name=validate_key(object_key))
+        except Exception as error:
+            raise StorageError("RESULT_DELETE_FAILED", "Could not delete MinIO result object") from error
+
 
 def storage_from_env() -> Storage:
     hosts = frozenset(filter(None, os.environ.get("HEATPIPE_ALLOWED_SOURCE_HOSTS", "").split(",")))
+    http_hosts = frozenset(filter(None, os.environ.get("HEATPIPE_ALLOWED_INTERNAL_HTTP_HOSTS", "").split(",")))
     kind = os.environ.get("HEATPIPE_STORAGE", "local").lower()
     if kind == "local":
-        return LocalStorage(os.environ.get("HEATPIPE_STORAGE_ROOT", "data/objects"), hosts)
+        return LocalStorage(os.environ.get("HEATPIPE_STORAGE_ROOT", "data/objects"), hosts, http_hosts)
     if kind == "minio":
         return MinioStorage(
             bucket=os.environ["HEATPIPE_MINIO_BUCKET"],
@@ -180,5 +233,6 @@ def storage_from_env() -> Storage:
             secret_key=os.environ["HEATPIPE_MINIO_SECRET_KEY"],
             secure=os.environ.get("HEATPIPE_MINIO_SECURE", "true").lower() == "true",
             allowed_url_hosts=hosts,
+            allowed_http_hosts=http_hosts,
         )
     raise ValueError(f"Unsupported HEATPIPE_STORAGE: {kind}")

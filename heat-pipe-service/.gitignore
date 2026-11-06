@@ -9,4 +9,5 @@ output/
 tmp/
 .env
 *.sqlite3
+!src/heatpipe_service/api/mock_image.png
 

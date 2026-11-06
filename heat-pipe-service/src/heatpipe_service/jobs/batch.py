@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import math
 import time
@@ -15,6 +16,8 @@ from typing import Any, Callable
 
 import numpy as np
 
+from heatpipe_service.cancellation import JobCancelled
+from heatpipe_service.security import redact_url_query
 from heatpipe_service.analysis.algorithms import V0_CANDIDATE_ALGORITHMS, score_maps
 from heatpipe_service.analysis.candidates import extract_candidates
 from heatpipe_service.analysis.io import (
@@ -28,7 +31,7 @@ from heatpipe_service.analysis.rendering import draw_result_image, imwrite_unico
 from heatpipe_service.analysis.roi import Roi, clip_roi, grid_cell_roi
 from heatpipe_service.analysis.tracking import build_tracks, summarize_track
 
-SCHEMA_VERSION = "0.1.0"
+SCHEMA_VERSION = "0.3.0"
 KST = ZoneInfo("Asia/Seoul")
 
 def format_captured_at(timestamp: str) -> str:
@@ -86,16 +89,20 @@ class BatchProgress:
 
 
 ProgressCallback = Callable[[BatchProgress], None]
+CancelCheck = Callable[[], bool]
 
 
 def run_batch(
     request: BatchRequest,
     config: BatchConfig | None = None,
     on_progress: ProgressCallback | None = None,
+    should_cancel: CancelCheck | None = None,
 ) -> BatchArtifacts:
     """Execute one monitoring-data analysis and materialize all local artifacts."""
     config = config or BatchConfig()
     started = time.perf_counter()
+    if should_cancel and should_cancel():
+        raise JobCancelled()
     if on_progress:
         on_progress(BatchProgress("VALIDATING", 1, 0, None, "Validating ATT/ATG input"))
     _validate_request(request, config)
@@ -127,6 +134,8 @@ def run_batch(
     if on_progress:
         on_progress(BatchProgress("ANALYZING", 10, 0, selected_frame_count, "Analyzing thermal frames"))
     for examined_count, frame_index in enumerate(range(frame_start, frame_end, config.frame_stride), start=1):
+        if should_cancel and should_cancel():
+            raise JobCancelled()
         frame_c = read_att_frame_celsius(request.att_path, frame_index, header)
         if not np.isfinite(frame_c).all() or float(np.max(frame_c)) <= 0:
             empty_frames += 1
@@ -142,6 +151,8 @@ def run_batch(
                 f"Examined {examined_count} of {selected_frame_count} frames",
             ))
 
+    if should_cancel and should_cancel():
+        raise JobCancelled()
     tracks = build_tracks(
         by_frame,
         max_dist=config.max_track_distance,
@@ -152,15 +163,22 @@ def run_batch(
         header.height,
         config,
     )
-    selected_tracks = [
+    eligible_tracks = [
         item for item in ranked_tracks if int(item["summary"]["n_frames"]) >= config.min_track_frames
-    ][: config.max_results]
+    ]
+    selected_tracks = _select_tracks_across_frames(
+        eligible_tracks, frame_start, frame_end, config.max_results
+    )
+    if should_cancel and should_cancel():
+        raise JobCancelled()
 
     result_candidates: list[dict[str, Any]] = []
     image_paths: list[Path] = []
     if on_progress:
         on_progress(BatchProgress("RENDERING", 90, len(processed_frames), selected_frame_count, "Rendering result images"))
     for rank, item in enumerate(selected_tracks, start=1):
+        if should_cancel and should_cancel():
+            raise JobCancelled()
         candidate_id = f"{request.job_id}-CAND-{rank:04d}"
         candidate, image_path = _materialize_candidate(
             request,
@@ -205,9 +223,11 @@ def run_batch(
                 "min_area_px": config.min_area,
                 "min_track_frames": config.min_track_frames,
                 "merge_iou_threshold": config.merge_iou_threshold,
+                "max_results": config.max_results,
             },
             "elapsed_seconds": round(time.perf_counter() - started, 3),
         },
+        "detected_candidate_count": len(eligible_tracks),
         "candidate_count": len(result_candidates),
         "candidates": result_candidates,
         "warnings": warnings,
@@ -216,6 +236,8 @@ def run_batch(
 
     result_json = output_dir / "analysis_result.json"
     candidates_csv = output_dir / "analysis_candidates.csv"
+    if should_cancel and should_cancel():
+        raise JobCancelled()
     result_json.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False),
         encoding="utf-8",
@@ -230,6 +252,7 @@ def run_batch_safely(
     request: BatchRequest,
     config: BatchConfig | None = None,
     on_progress: ProgressCallback | None = None,
+    should_cancel: CancelCheck | None = None,
 ) -> BatchArtifacts:
     """Run a batch and persist a schema-valid FAILED result for operational errors."""
     last_progress: BatchProgress | None = None
@@ -241,8 +264,11 @@ def run_batch_safely(
         last_progress = update
 
     try:
-        return run_batch(request, config, report if on_progress else None)
+        return run_batch(request, config, report if on_progress else None, should_cancel)
+    except JobCancelled:
+        raise
     except Exception as error:
+        safe_message = redact_url_query(str(error) or error.__class__.__name__)
         output_dir = Path(request.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         result_json = output_dir / "analysis_result.json"
@@ -256,11 +282,12 @@ def run_batch_safely(
             "completed_at": _utc_now(),
             "processing": None,
             "candidate_count": 0,
+            "detected_candidate_count": None,
             "candidates": [],
             "warnings": [],
             "error": {
                 "code": _error_code(error),
-                "message": str(error) or error.__class__.__name__,
+                "message": safe_message,
             },
         }
         result_json.write_text(
@@ -273,7 +300,7 @@ def run_batch_safely(
                 "FAILED", last_progress.progress_percent if last_progress else 0,
                 last_progress.processed_frame_count if last_progress else 0,
                 last_progress.total_frame_count if last_progress else None,
-                str(error) or error.__class__.__name__,
+                safe_message,
                 error_code=_error_code(error),
             ))
         return BatchArtifacts(result_json, candidates_csv, success=False)
@@ -299,8 +326,8 @@ def _validate_request(request: BatchRequest, config: BatchConfig) -> None:
         raise ValueError("frame_end must be greater than frame_start")
     if config.frame_stride <= 0:
         raise ValueError("frame_stride must be positive")
-    if config.min_track_frames <= 0 or config.max_results <= 0:
-        raise ValueError("min_track_frames and max_results must be positive")
+    if config.min_track_frames <= 0 or not 1 <= config.max_results <= 1000:
+        raise ValueError("min_track_frames must be positive and max_results must be 1..1000")
     if not config.algorithms:
         raise ValueError("at least one algorithm is required")
     if config.analysis_device not in {"cpu", "cuda"}:
@@ -403,6 +430,32 @@ def _rank_tracks(tracks: list[dict[str, Any]], frame_height: int, config: BatchC
     return sorted(ranked, key=lambda item: item["persistence_score"], reverse=True)
 
 
+def _select_tracks_across_frames(
+    ranked_tracks: list[dict[str, Any]], frame_start: int, frame_end: int, limit: int
+) -> list[dict[str, Any]]:
+    """Preserve score order unless capped; then share slots across ten frame intervals."""
+    if len(ranked_tracks) <= limit:
+        return ranked_tracks
+    interval_count = min(10, limit)
+    intervals: list[list[dict[str, Any]]] = [[] for _ in range(interval_count)]
+    span = frame_end - frame_start
+    for item in ranked_tracks:
+        offset = max(0, int(item["representative_frame"]) - frame_start)
+        interval = min(interval_count - 1, offset * interval_count // span)
+        intervals[interval].append(item)
+    selected: list[dict[str, Any]] = []
+    while len(selected) < limit:
+        added = False
+        for interval in intervals:
+            if interval and len(selected) < limit:
+                selected.append(interval.pop(0))
+                added = True
+        if not added:
+            break
+    rank_order = {id(item): index for index, item in enumerate(ranked_tracks)}
+    return sorted(selected, key=lambda item: rank_order[id(item)])
+
+
 def _materialize_candidate(
     request: BatchRequest,
     header: Any,
@@ -437,6 +490,7 @@ def _materialize_candidate(
     )
     if not imwrite_unicode(image_path, rendered, ".png"):
         raise OSError(f"failed to write result image: {image_path}")
+    image_bytes = image_path.read_bytes()
 
     atg = atg_records[frame_index] if frame_index < len(atg_records) else None
     summary = track_item["summary"]
@@ -469,6 +523,8 @@ def _materialize_candidate(
                 "width": int(header.width),
                 "height": int(header.height),
                 "path": image_path.relative_to(request.output_dir).as_posix(),
+                "sha256": hashlib.sha256(image_bytes).hexdigest(),
+                "size_bytes": len(image_bytes),
                 "grid": {
                     "rows": config.display_grid_rows,
                     "columns": config.display_grid_columns,

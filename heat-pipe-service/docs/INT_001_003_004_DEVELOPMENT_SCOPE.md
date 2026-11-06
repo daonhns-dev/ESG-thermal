@@ -100,6 +100,7 @@ GET /api/v1/analysis-jobs/{jobId}
 - `UPLOADING`
 - `SUCCEEDED`
 - `FAILED`
+- `CANCELLED`
 
 ### 응답 범위
 
@@ -110,6 +111,9 @@ GET /api/v1/analysis-jobs/{jobId}
 - 상태 설명
 - 생성·시작·완료 시각
 - 실패 시 오류 코드와 메시지
+- 시도 횟수, 취소 요청 여부, 실패 오류의 재시도 가능 여부
+
+작업 취소는 `POST /api/v1/analysis-jobs/{jobId}/cancel`로 요청한다. 대기 작업은 즉시 `CANCELLED`가 되고, 실행 중 작업은 분석 워커의 중단 지점에서 종료된다. 취소 접수 직후에는 INT-004로 최종 상태를 확인한다.
 
 분석 완료 확인 방식은 INT-004를 일정 주기로 조회하는 폴링 방식을 기본안으로
 한다. 콜백 방식과 진행률 상세 정책은 11월 6일 API 명세에서 확정한다.
