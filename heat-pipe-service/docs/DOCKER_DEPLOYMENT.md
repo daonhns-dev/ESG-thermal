@@ -15,6 +15,18 @@ docker compose ps
 
 기본 바인딩은 `127.0.0.1:18001`이다. Compose는 `HEATPIPE_ENV=production`을 고정해 `/docs`, `/redoc`, `/openapi.json` 경로를 만들지 않는다(HTTP 404). `/health`와 `/version`은 계속 인증 없이 확인할 수 있다. OpenAPI 정적 사본은 `docs/openapi.json` 파일로 별도 전달한다. VTI 시험 서버에서는 HTTPS 프록시 뒤에 배치하고, 필요한 네트워크 정책에 맞게 `HEATPIPE_BIND_HOST`를 설정한다. Bearer 키는 VTI 백엔드와 서버 사이에서만 사용한다.
 
+## 2026-11-06 시험 엔드포인트 배포
+
+현재 공개 시험 주소는 `https://heatpipe.daonhns.com`이다. 실제 경로는 **아임웹 A 레코드 → ipTIME 공유기 외부 443 → `192.168.0.185` Windows nginx → `127.0.0.1:18003` SSH 포워드 → `192.168.0.50:8282` SSH 접속 → 분석 서버 `10.1.2.2:18001` → Docker API**다. 분석 서버에서 확인한 인터페이스 주소는 `10.1.2.2/16`이며 `192.168.0.50`을 `HEATPIPE_BIND_HOST`에 넣으면 Docker가 포트를 바인딩할 수 없다. 삼성 컴퓨터에서 `10.1.2.2`로 직접 라우팅되지 않아 SSH 포워드를 사용한다.
+
+서버의 `.env`에서 `HEATPIPE_BIND_HOST=10.1.2.2`, `HEATPIPE_HTTP_PORT=18001`을 사용한다. `HeatpipeApiTunnel` NSSM 서비스는 삼성 컴퓨터의 `LocalSystem` 계정으로 자동 시작하며 SSH 연결이 끊기면 재시작한다. 터널 전용 SSH 키는 `C:\ProgramData\HeatpipeTunnel`에 있고 개인키 파일은 `SYSTEM`만 읽는다. 분석 서버의 공개키 등록은 `10.1.2.2:18001` 목적지 포워드로 제한된다. 키 내용과 Bearer 비밀키를 저장소나 문서에 기록하지 않는다.
+
+Windows nginx는 `C:\nginx\conf\heatpipe.conf`에서 `heatpipe.daonhns.com`의 80/443을 처리한다. 80의 `/.well-known/acme-challenge/`는 win-acme 파일 검증용 `C:\nginx\acme`를 제공하고, 443은 공개 TLS 인증서를 사용해 `http://127.0.0.1:18003`으로 프록시한다. win-acme는 `C:\nginx\ssl`에 PEM 파일을 저장하고 갱신 항목을 만들었다. 갱신 후 nginx 자동 reload 연결은 아직 확인해야 한다. 수동으로 nginx 설정을 적용할 때는 `C:\nginx`에서 `nginx.exe -t`를 실행하고, `SYSTEM` 계정의 reload 작업을 사용한다. 삼성 사용자 계정에서 직접 `nginx.exe -s reload`를 실행하면 권한 오류가 난다.
+
+`compose.https.yaml`과 `Caddyfile.test`는 외부 443을 분석 서버로 직접 전달하는 방안을 시험하려고 준비한 파일이다. 기존 공유기 규칙이 80과 443을 삼성 컴퓨터로 보내고 있어 이 경로에서 Caddy의 공개 인증서 발급은 실패했다. 현재 시험 엔드포인트는 Caddy를 사용하지 않으며 `https` 컨테이너를 중지했다. API와 워커는 계속 실행 중이다.
+
+사내 PC의 공개 호스트명 호출에서 인증서 검증·`/health` HTTP 200·`/version` HTTP 200, 문서 경로 404, 인증 없는 작업 조회 401을 확인했다. 휴대전화 모바일 데이터에서도 `/health`가 `status=ok`, `worker_running=true`로 응답했다. 공개 HTTPS 경로에서 합성 ATT·ATG 4프레임 작업의 인증된 접수·완료·결과 JSON·PNG 조회와 API·워커 재시작 후 상태·결과 유지를 확인했다. VTI 시험망 접속과 VTI MinIO 실파일 다운로드는 아직 검증하지 않았다. 상세 진행 상태는 [엔드포인트 준비표](TEST_ENDPOINT_READINESS_2026-11-09.md)를 따른다.
+
 VTI가 시험용 Presigned URL의 **호스트명**을 별도 전달하면, 연동 시험 전 `.env`의 `HEATPIPE_ALLOWED_SOURCE_HOSTS`에 등록한다(쉼표로 복수 호스트 구분, 스킴·경로·포트·서명 쿼리는 넣지 않음). API와 워커가 같은 설정을 사용하므로 변경 후 `docker compose up -d --force-recreate api worker`로 적용한다. 시험 서버처럼 서로 다른 서버 간 파일 전송은 HTTPS를 사용한다. 최종 동일 서버 배포에서는 포털 백엔드→분석 API와 분석 워커→MinIO를 공유 Docker 내부망의 HTTP 서비스 주소로 연결한다. 후자의 **MinIO 서비스 호스트명만** `HEATPIPE_ALLOWED_INTERNAL_HTTP_HOSTS`에 등록한다. HTTP 허용 목록은 기본적으로 비어 있고, 외부 호스트는 등록하지 않는다. 실제 내부 서비스 이름·포트·네트워크 연결은 VTI Compose 구성과 함께 확인한다. Presigned URL의 서명 경로·쿼리를 변경하거나 리다이렉트하지 않아야 한다.
 
 API와 분석 워커는 `heatpipe_data` 볼륨을 공유한다. `/data/jobs.sqlite3`에 작업 상태, `/data/objects`에 입력 및 결과 파일, `/data/work`에 처리 중 임시 파일이 있다. CPU 배포 갱신은 `docker compose up -d --build`를 사용한다. 볼륨을 지우는 명령은 사용하지 않는다.

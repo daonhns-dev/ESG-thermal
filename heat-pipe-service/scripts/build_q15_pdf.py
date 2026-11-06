@@ -93,7 +93,7 @@ def as_table(lines: list[str]) -> Table:
         if all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells):
             continue
         style = CELLHEAD if not rows else CELL
-        rows.append([Paragraph(markup(cell), style) for cell in cells])
+        rows.append([Paragraph(markup(cell.replace("`", "") if not rows else cell), style) for cell in cells])
     count = len(rows[0])
     width = 505
     if count == 3:

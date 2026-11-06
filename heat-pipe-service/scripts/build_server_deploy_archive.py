@@ -11,8 +11,10 @@ DESTINATION = ROOT / "output" / "heatpipe-service-cpu-deploy-20261106.tar.gz"
 FILES = (
     ".dockerignore",
     ".env.example",
+    "Caddyfile.test",
     "Dockerfile",
     "README.md",
+    "compose.https.yaml",
     "compose.yaml",
     "pyproject.toml",
 )

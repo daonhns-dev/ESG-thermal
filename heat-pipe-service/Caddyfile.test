@@ -1,0 +1,7 @@
+{
+    auto_https disable_redirects
+}
+
+daonhns.iptime.org {
+    reverse_proxy api:8000
+}

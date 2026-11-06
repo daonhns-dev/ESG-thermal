@@ -1,6 +1,6 @@
 # DaonH&S 측 VTI 연동 시험 준비 체크리스트
 
-- 기준일: 2026-11-04
+- 기준일: 2026-11-06
 - 범위: [Q15 연동 API 명세 v1.0](Q15_VTI_INTEGRATION_API_FINAL.md)과 INT-001·003·004 개발 범위
 - `[x]`는 현재 확인된 사실, `[ ]`는 연동 시험 전에 완료하거나 양측이 확정할 항목이다.
 - 이 문서는 DaonH&S의 준비·확인 항목이다. 로컬 `[x]`는 **VTI 서버와의 연동 통과**를 뜻하지 않는다. VTI 측 확인 항목과 양측의 연동 완료 기준은 VTI 회신을 받은 뒤 함께 정한다.
@@ -28,6 +28,8 @@
 - [x] B-08: 새 분석 결과와 기존 저장 결과의 INT-001 응답에 PNG 바이트 크기·SHA-256을 제공하고, 로컬 전체 프레임 샘플의 PNG 50장과 대조한다.
 - [x] B-09: SQLite의 대기 작업을 기준으로 `queue_position`을 계산하고 작업 취소·선점 후 값을 갱신한다.
 - [x] B-13: 운영 Compose에서 문서 경로를 비활성화하고 `/health`·`/version` 공개를 유지하는 설정을 로컬 API 테스트로 확인한다.
+- [x] DaonH&S 시험 API를 `https://heatpipe.daonhns.com`(443)에 배포하고 외부망에서 인증서·`/health`·`/version` 및 인증된 INT-004·INT-001·PNG 조회를 확인했다. 분석 워커 컨테이너의 외부 출발 IP는 `211.60.149.76`이다.
+- [x] 시험 서버의 CPU 워커로 합성 ATT·ATG 4프레임을 공개 HTTPS INT-003에서 접수해 `SUCCEEDED`·후보 1건·PNG 크기와 SHA-256 일치를 확인했다. API·워커 재시작 후 같은 작업의 상태와 결과 JSON을 다시 조회했다. VTI MinIO 실파일 작업과 시험 서버 전체 프레임 성능은 별도로 확인한다.
 
 ## VTI 연동 시험 전 완료
 
@@ -40,9 +42,9 @@
 - [ ] **R2-02 전체 후보 수:** 새 실데이터 결과에서 `processing.parameters.max_results`와 `detected_candidate_count`가 기록되고, `candidate_count = min(detected_candidate_count, max_results)`인지 확인한다. 포털에서 두 건수로 잘림 여부를 구분하는지 검증한다. 이전 저장 결과의 null은 미확인으로 취급한다.
 - [ ] **R2-07 ROI 온도 필수:** 앞으로 INT-003으로 접수한 작업의 INT-001 결과에서 모든 후보의 `roi_temperature_c`가 객체인지 확인한다. 누락·null 결과는 워커가 `SUCCEEDED`로 저장하지 않는지 검증한다. 이전 저장 결과의 null은 신규 작업 계약과 구분한다.
 - [ ] **R2-13 배포 경로:** 시험 전 VTI가 제공한 HTTPS Presigned URL 호스트를 API·워커 허용 목록에 등록하고 재시작한다. 최종 동일 서버 배포에서는 포털 백엔드→분석 API, 분석 워커→MinIO를 공유 Docker 내부망의 HTTP 서비스 주소로 연결하고 MinIO 호스트만 내부 HTTP 허용 목록에 등록한다. 워커 컨테이너에서 서명 경로·쿼리 전달·리다이렉트 없는 GET을 확인한다. 원본 ATT·ATG의 서로 다른 Object Key가 한 작업으로 처리되는지 확인하고 API·워커 로그에서 URL 서명 노출 여부를 점검한다.
-- [ ] **GPU 시험 서버 배포:** DaonH&S 시험 서버에서 GPU 모델·드라이버·Docker GPU 지원을 확인하고 `compose.gpu.yaml`로 API와 단일 CUDA 분석 워커를 가동한다. 영속 볼륨, 재시작 후 상태, 임시 파일 정리와 실제 입력 한 건을 서버에서 재확인한다. 로컬 Docker 검증은 완료했다.
-- [ ] **접근망·인증:** VTI 임시 서버 단계의 DaonH&S 시험 API HTTPS 443 기준 주소·접근망, 분석 워커의 VTI MinIO HTTPS 접속·출발지 주소를 서버 준비 후 확인한다. 최종 DaonH&S 서버 배포에서는 이용자용 포털 도메인·HTTPS 443과 포털 백엔드→분석 API의 공유 Docker 내부망 경로, 분석 워커에서 접근 가능한 MinIO URL 호스트를 양측 배포 구성에 맞춰 확인한다. Bearer 키는 별도 보안 채널로 전달하고 양측 서버 환경에만 보관한다. 교체 일시를 협의해 포털 백엔드와 DaonH&S API 컨테이너를 같은 작업 시간대에 재기동·재생성한 뒤 인증 호출을 확인한다. VTI 백엔드의 PNG 중계 경로를 정하고 호출한다. VTI 시험 서버에서 `/health`의 `worker_running`·`worker_last_activity_at`·`queued_job_count`를 확인한다.
-- [ ] **운영 문서 경로:** 시험 서버의 외부 주소에서 `/docs`·`/redoc`·`/openapi.json`이 404이고 `/health`·`/version`은 정상 응답하는지 확인한다. OpenAPI는 정적 파일로 VTI에 전달한다.
+- [ ] **시험 서버 전체 실파일·용량:** 현재 시험 서버는 CPU 워커로 실행 중이다. VTI ATT·ATG 전체 파일의 다운로드·분석 시간, 메모리·디스크 사용량 및 임시 파일 정리를 확인한다. GPU 사용 가능 여부가 확인되면 별도로 가속 배포를 검토한다. 로컬 CPU·GPU 전체 파일 검증값을 시험 서버 성능으로 해석하지 않는다.
+- [ ] **접근망·인증:** DaonH&S 측 외부망에서 `https://heatpipe.daonhns.com`의 HTTPS 443과 Bearer 인증은 확인했다. VTI 시험망에서 같은 주소의 접속·인증을 확인하고, 분석 워커의 VTI MinIO HTTPS 접근 및 출발 IP `211.60.149.76`의 허용 목록 적용을 확인한다. 최종 동일 서버 배포에서는 이용자용 포털 도메인과 포털 백엔드→분석 API의 공유 Docker 내부망 경로, 워커에서 접근 가능한 MinIO URL 호스트를 양측 배포 구성에 맞춰 확인한다. Bearer 키는 별도 보안 채널로 전달하고 양측 서버 환경에만 보관한다. VTI 백엔드의 PNG 중계 경로를 정하고 호출한다. VTI 시험 서버에서 `/health`의 `worker_running`·`worker_last_activity_at`·`queued_job_count`를 확인한다.
+- [x] **운영 문서 경로:** 시험 서버의 공개 HTTPS 주소에서 `/docs`·`/redoc`·`/openapi.json`은 404이고 `/health`·`/version`은 정상 응답함을 확인했다. OpenAPI는 정적 파일로 전달한다.
 - [ ] **완료 확인:** INT-004 10초 폴링과 포털의 임시 대기 한도(`QUEUED` 6시간·실행 3시간)를 VTI와 합의한다. 시간 초과는 포털의 처리 지연 안내로 표시하고 작업의 실제 `FAILED`와 구분하며, 동일 `job_id` 재조회·자동 재시도 시 상태 전환을 시험한다. VTI MinIO·시험 서버에서 전체 파일 소요 시간을 측정해 한도를 다시 검토한다. 현재 콜백과 분석 워커의 강제 실행 시간 제한은 구현되어 있지 않다.
 - [ ] **대기 순번:** VTI 포털이 `QUEUED`에서 `queue_position`을 앞선 대기 건수로 표시하고, 실행 중에는 숨기며 예상 완료 시간으로 해석하지 않는지 확인한다.
 - [ ] **작업 취소:** VTI 포털에서 대기·실행 중 작업의 취소 API 호출, `cancel_requested=true` 표시 후 `CANCELLED` 도달, 결과 조회 409, 재시도 방지를 시험한다. 포털의 시간 초과 자체로 취소 API를 자동 호출할지는 VTI와 운영 정책을 정한다.
