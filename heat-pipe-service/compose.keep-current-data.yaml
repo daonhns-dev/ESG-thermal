@@ -1,0 +1,18 @@
+# Stage 1 only: pin /data to the EXISTING volume for both services.
+# Apply after the server's base/https/portal files when validating a code-only update.
+# This does not migrate data or enable path inputs. Do not start the https service.
+services:
+  api:
+    volumes:
+      - type: volume
+        source: existing_analysis_data
+        target: /data
+  worker:
+    volumes:
+      - type: volume
+        source: existing_analysis_data
+        target: /data
+volumes:
+  existing_analysis_data:
+    external: true
+    name: heatpipe-service_heatpipe_data
