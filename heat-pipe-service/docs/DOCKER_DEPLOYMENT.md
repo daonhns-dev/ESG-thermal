@@ -27,7 +27,23 @@ Windows nginx는 `C:\nginx\conf\heatpipe.conf`에서 `heatpipe.daonhns.com`의 8
 
 사내 PC의 공개 호스트명 호출에서 인증서 검증·`/health` HTTP 200·`/version` HTTP 200, 문서 경로 404, 인증 없는 작업 조회 401을 확인했다. 휴대전화 모바일 데이터에서도 `/health`가 `status=ok`, `worker_running=true`로 응답했다. 공개 HTTPS 경로에서 합성 ATT·ATG 4프레임 작업의 인증된 접수·완료·결과 JSON·PNG 조회와 API·워커 재시작 후 상태·결과 유지를 확인했다. VTI 시험망 접속과 VTI MinIO 실파일 다운로드는 아직 검증하지 않았다. 상세 진행 상태는 [엔드포인트 준비표](TEST_ENDPOINT_READINESS_2026-11-09.md)를 따른다.
 
-VTI가 시험용 Presigned URL의 **호스트명**을 별도 전달하면, 연동 시험 전 `.env`의 `HEATPIPE_ALLOWED_SOURCE_HOSTS`에 등록한다(쉼표로 복수 호스트 구분, 스킴·경로·포트·서명 쿼리는 넣지 않음). API와 워커가 같은 설정을 사용하므로 변경 후 `docker compose up -d --force-recreate api worker`로 적용한다. 시험 서버처럼 서로 다른 서버 간 파일 전송은 HTTPS를 사용한다. 최종 동일 서버 배포에서는 포털 백엔드→분석 API와 분석 워커→MinIO를 공유 Docker 내부망의 HTTP 서비스 주소로 연결한다. 후자의 **MinIO 서비스 호스트명만** `HEATPIPE_ALLOWED_INTERNAL_HTTP_HOSTS`에 등록한다. HTTP 허용 목록은 기본적으로 비어 있고, 외부 호스트는 등록하지 않는다. 실제 내부 서비스 이름·포트·네트워크 연결은 VTI Compose 구성과 함께 확인한다. Presigned URL의 서명 경로·쿼리를 변경하거나 리다이렉트하지 않아야 한다.
+VTI가 시험용 Presigned URL의 **호스트명**을 별도 전달하면, 연동 시험 전 `.env`의 `HEATPIPE_ALLOWED_SOURCE_HOSTS`에 등록한다(쉼표로 복수 호스트 구분, 스킴·경로·포트·서명 쿼리는 넣지 않음). API와 워커가 같은 설정을 사용하므로 변경 후 `docker compose up -d --force-recreate api worker`로 적용한다. 시험 서버처럼 서로 다른 서버 간 파일 전송은 HTTPS를 사용한다. 최종 동일 서버 배포에서는 포털 백엔드→분석 API와 분석 워커→MinIO를 공유 Docker 내부망의 HTTP 서비스 주소로 연결한다. 후자의 MinIO **호스트명 또는 호스트명:포트**를 `HEATPIPE_ALLOWED_INTERNAL_HTTP_HOSTS`에 등록한다. `호스트명:포트`는 해당 포트에만 HTTP를 허용한다. HTTP 허용 목록은 기본적으로 비어 있고, 외부 호스트는 등록하지 않는다. 실제 내부 서비스 이름·포트·네트워크 연결은 VTI Compose 구성과 함께 확인한다. Presigned URL의 서명 경로·쿼리를 변경하거나 리다이렉트하지 않아야 한다.
+
+### VTI 포털 공유 네트워크 연결 준비 (2026-11-13)
+
+VTI의 `HTP_Portal_분석API_연결설정_20261112_ver1.0_KR` 및 11월 13일 추가 요청에 맞춰 `compose.portal.yaml`을 준비했다. 기본 Compose만 실행하면 기존 시험 API 구성 그대로이며, 포털용 오버레이를 추가하면 `api`와 `worker`만 기존 `default` 네트워크와 외부 `heatpipe-shared` 네트워크에 함께 연결된다. API에는 공유 네트워크 별칭 `daon-api`가 붙어 포털 접속 주소가 `http://daon-api:8000`이 된다. API와 워커의 `/data`는 기존 `heatpipe_data` 볼륨을 계속 공유한다.
+
+서버 `.env`의 `HEATPIPE_ALLOWED_INTERNAL_HTTP_HOSTS`에 기존 항목을 유지하면서 `portal-minio:9000`을 쉼표로 추가한다. 기존 값이 비어 있으면 `HEATPIPE_ALLOWED_INTERNAL_HTTP_HOSTS=portal-minio:9000`으로 설정한다. 오버레이는 이 환경변수를 덮어쓰지 않는다. `portal-minio:9000`은 해당 내부 MinIO의 9000 포트만 HTTP로 허용하며, Presigned URL의 경로·서명은 변경하지 않는다.
+
+VTI는 원래 **11월 16일 포털 설치 완료 후, 진행 중인 분석 작업이 없을 때** 적용을 요청했다. 사용자 요청으로 11월 16일 설치 전 활성 작업이 없음을 확인하고 사전 적용했다. `compose.portal.yaml`과 포트별 내부 URL 허용을 지원하는 `src/heatpipe_service/storage/backends.py`만 서버에 전송했다. 공유 네트워크가 이미 존재했고, 기존 파일 백업·`.env`의 `portal-minio:9000` 설정·이미지 재빌드·API/워커 재생성을 완료했다. 향후 다시 배포할 때는 아래처럼 오버레이를 포함한다. 기존 시험 구성의 `compose.https.yaml`도 조합하되, 중지된 `https` 서비스는 시작하지 않는다.
+
+```sh
+docker compose -f compose.yaml -f compose.portal.yaml config --quiet
+docker compose -f compose.yaml -f compose.portal.yaml up -d --build --no-deps --force-recreate api worker
+docker compose -f compose.yaml -f compose.portal.yaml ps api worker
+```
+
+API는 이미 컨테이너 내부 `0.0.0.0:8000`에서 수신한다. 포털 컨테이너가 공유 네트워크에 연결된 후 `http://daon-api:8000/health`로 통신되는지 확인한다. URL의 `http://portal-minio:9000/...` 경로·서명은 바꾸지 않는다. 프록시 환경변수(`HTTP_PROXY` 등)를 별도로 설정한 서버라면 `NO_PROXY`에 `portal-minio`를 추가한다. 현재 Compose에는 프록시 설정이 없다. 실제 MinIO Presigned URL 다운로드와 결과 조회는 포털 설치 후 검증한다.
 
 API와 분석 워커는 `heatpipe_data` 볼륨을 공유한다. `/data/jobs.sqlite3`에 작업 상태, `/data/objects`에 입력 및 결과 파일, `/data/work`에 처리 중 임시 파일이 있다. CPU 배포 갱신은 `docker compose up -d --build`를 사용한다. 볼륨을 지우는 명령은 사용하지 않는다.
 
@@ -74,3 +90,27 @@ Windows 터미널에서 API 요청·상태 조회·결과·PNG를 검증한다. 
 VTI 자료의 제안 시험 서버는 Ubuntu VM 4 vCPU·8 GB RAM·32 GB 디스크이며, 하루 ATT+ATG 2세트와 공용 계정 3명을 가정한다. **이 사양에서 실제 770 MB급 입력을 Docker로 처리하는 성능·디스크 여유·동시 요청은 아직 검증하지 않았다.** 실제 서버 크기, 파일 보관 기간, 동시 작업 수, VTI 저장소 접근 방식과 HTTPS 연결을 Q26/연동 시험에서 확인해야 한다. 현재 분석 워커는 한 프로세스 운영을 전제로 한다.
 
 VTI 슬라이드의 포털 전체 산출물(앱·DB·MinIO Compose, 초기 계정/데이터, 포털 UAT)은 DaonH&S 분석 서비스 컨테이너의 구현 범위와 구분한다. 연동 시험은 VTI가 실데이터 파일 참조와 API 호출을 제공하고, DaonH&S 서버에서 작업 완료·결과 조회를 함께 확인하는 순서로 진행한다. 현재 확정된 개발 범위는 [INT-001·003·004 범위 문서](INT_001_003_004_DEVELOPMENT_SCOPE.md)를 따른다.
+# 2026-11-18 방안 A 검토용 추가
+
+공유 원본 직접 읽기와 외부 스토리지 마운트는 아직 서버에 적용하지 않았다.
+최신 계약·배포 조건은 [Q15 v1.1 검토본](Q15_SHARED_PATH_V1_1_DRAFT.md)을 따른다.
+`compose.external-data.yaml`과 `compose.shared-input.yaml`은 기존 파일들 뒤에
+선택적으로 추가하며, 데이터 이전과 VTI 포털 수정 전에는 활성화하지 않는다.
+# 시험 서버 분석 데이터 이전 완료 (2026-11-19)
+
+분석 API·워커의 기존 이미지와 URL 방식은 유지하면서 데이터만 `/data/data/analysis`로
+이전했다. 현재 서버의 `.env` 기본 COMPOSE_FILE은
+`compose.yaml:compose.portal.yaml:compose.external-data.yaml`이다.
+서버에서 아래 명령으로 확인하며, 오래된 세 파일(https 포함)만 지정하는 up 명령이나
+옛 볼륨 고정용 keep-current 오버레이를 다시 사용하지 않는다.
+
+```bash
+cd ~/heat-pipe-service
+docker compose config --quiet
+docker compose ps api worker
+```
+
+기존 named volume과 백업은 보존했다. 중지된 Caddy https의 orphan 경고는 예상된
+안내이며 `--remove-orphans`가 이번 작업에 필요하지 않다. r3 코드·공유 path 모드는
+아직 서버 미적용이다. 상세 실행 결과와 복구 제약은
+[전환 기록](EXTERNAL_STORAGE_MIGRATION_2026-11-18.md)의 최신 상태를 따른다.

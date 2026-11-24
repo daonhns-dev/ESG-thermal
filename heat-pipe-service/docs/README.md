@@ -43,3 +43,8 @@ INT-001·003·004의 제안 요청·응답 모델과 OpenAPI는 `src/heatpipe_se
 - 2026년 11월 6일 전달본부터 엔드포인트·요청·응답·인증·오류 코드를
   OpenAPI 명세와 일치시킨다.
 
+## VTI 공유 경로 연동 (v1.1)
+
+- [공유 경로 API 명세 송부본](Q15_SHARED_PATH_V1_1_SEND_20261119.md)
+- [분석 서비스 배포 및 검증 기록](R3_DEPLOYMENT_PREPARATION_20261119.md)
+- 2026-11-23에 분석 API·워커에 공유 경로를 적용하고, VTI PATH 작업의 분석 완료와 결과 JSON·PNG 조회를 확인했다.
