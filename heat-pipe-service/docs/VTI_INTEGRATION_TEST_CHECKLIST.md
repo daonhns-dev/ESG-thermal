@@ -30,6 +30,7 @@
 - [x] B-13: 운영 Compose에서 문서 경로를 비활성화하고 `/health`·`/version` 공개를 유지하는 설정을 로컬 API 테스트로 확인한다.
 - [x] DaonH&S 시험 API를 `https://heatpipe.daonhns.com`(443)에 배포하고 외부망에서 인증서·`/health`·`/version` 및 인증된 INT-004·INT-001·PNG 조회를 확인했다. 분석 워커 컨테이너의 외부 출발 IP는 `211.60.149.76`이다.
 - [x] 시험 서버의 CPU 워커로 합성 ATT·ATG 4프레임을 공개 HTTPS INT-003에서 접수해 `SUCCEEDED`·후보 1건·PNG 크기와 SHA-256 일치를 확인했다. API·워커 재시작 후 같은 작업의 상태와 결과 JSON을 다시 조회했다. VTI MinIO 실파일 작업과 시험 서버 전체 프레임 성능은 별도로 확인한다.
+- [x] 11월 10일 VTI가 자사 시험망에서 `https://heatpipe.daonhns.com` 접속과 Bearer 인증을 완료했다고 회신했다. 상태·결과·PNG 조회 및 MinIO 실파일 분석은 별도 시험이다.
 
 ## VTI 연동 시험 전 완료
 
@@ -43,7 +44,7 @@
 - [ ] **R2-07 ROI 온도 필수:** 앞으로 INT-003으로 접수한 작업의 INT-001 결과에서 모든 후보의 `roi_temperature_c`가 객체인지 확인한다. 누락·null 결과는 워커가 `SUCCEEDED`로 저장하지 않는지 검증한다. 이전 저장 결과의 null은 신규 작업 계약과 구분한다.
 - [ ] **R2-13 배포 경로:** 시험 전 VTI가 제공한 HTTPS Presigned URL 호스트를 API·워커 허용 목록에 등록하고 재시작한다. 최종 동일 서버 배포에서는 포털 백엔드→분석 API, 분석 워커→MinIO를 공유 Docker 내부망의 HTTP 서비스 주소로 연결하고 MinIO 호스트만 내부 HTTP 허용 목록에 등록한다. 워커 컨테이너에서 서명 경로·쿼리 전달·리다이렉트 없는 GET을 확인한다. 원본 ATT·ATG의 서로 다른 Object Key가 한 작업으로 처리되는지 확인하고 API·워커 로그에서 URL 서명 노출 여부를 점검한다.
 - [ ] **시험 서버 전체 실파일·용량:** 현재 시험 서버는 CPU 워커로 실행 중이다. VTI ATT·ATG 전체 파일의 다운로드·분석 시간, 메모리·디스크 사용량 및 임시 파일 정리를 확인한다. GPU 사용 가능 여부가 확인되면 별도로 가속 배포를 검토한다. 로컬 CPU·GPU 전체 파일 검증값을 시험 서버 성능으로 해석하지 않는다.
-- [ ] **접근망·인증:** DaonH&S 측 외부망에서 `https://heatpipe.daonhns.com`의 HTTPS 443과 Bearer 인증은 확인했다. VTI 시험망에서 같은 주소의 접속·인증을 확인하고, 분석 워커의 VTI MinIO HTTPS 접근 및 출발 IP `211.60.149.76`의 허용 목록 적용을 확인한다. 최종 동일 서버 배포에서는 이용자용 포털 도메인과 포털 백엔드→분석 API의 공유 Docker 내부망 경로, 워커에서 접근 가능한 MinIO URL 호스트를 양측 배포 구성에 맞춰 확인한다. Bearer 키는 별도 보안 채널로 전달하고 양측 서버 환경에만 보관한다. VTI 백엔드의 PNG 중계 경로를 정하고 호출한다. VTI 시험 서버에서 `/health`의 `worker_running`·`worker_last_activity_at`·`queued_job_count`를 확인한다.
+- [ ] **후속 접근·인증:** DaonH&S 측 외부망과 VTI 시험망에서 `https://heatpipe.daonhns.com`의 HTTPS 443과 Bearer 인증은 확인했다. 분석 워커의 VTI MinIO HTTPS 접근 및 출발 IP `211.60.149.76`의 허용 목록 적용은 실제 파일 요청으로 확인한다. 최종 동일 서버 배포에서는 이용자용 포털 도메인과 포털 백엔드→분석 API의 공유 Docker 내부망 경로, 워커에서 접근 가능한 MinIO URL 호스트를 양측 배포 구성에 맞춰 확인한다. VTI 백엔드의 PNG 중계 경로를 정하고 호출한다. VTI 시험 서버에서 `/health` 필드와 INT-004·INT-001·PNG 응답을 확인한다.
 - [x] **운영 문서 경로:** 시험 서버의 공개 HTTPS 주소에서 `/docs`·`/redoc`·`/openapi.json`은 404이고 `/health`·`/version`은 정상 응답함을 확인했다. OpenAPI는 정적 파일로 전달한다.
 - [ ] **완료 확인:** INT-004 10초 폴링과 포털의 임시 대기 한도(`QUEUED` 6시간·실행 3시간)를 VTI와 합의한다. 시간 초과는 포털의 처리 지연 안내로 표시하고 작업의 실제 `FAILED`와 구분하며, 동일 `job_id` 재조회·자동 재시도 시 상태 전환을 시험한다. VTI MinIO·시험 서버에서 전체 파일 소요 시간을 측정해 한도를 다시 검토한다. 현재 콜백과 분석 워커의 강제 실행 시간 제한은 구현되어 있지 않다.
 - [ ] **대기 순번:** VTI 포털이 `QUEUED`에서 `queue_position`을 앞선 대기 건수로 표시하고, 실행 중에는 숨기며 예상 완료 시간으로 해석하지 않는지 확인한다.

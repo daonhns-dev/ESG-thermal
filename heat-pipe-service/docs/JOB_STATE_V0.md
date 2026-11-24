@@ -20,6 +20,15 @@
 - 진행률과 처리 프레임 수는 같은 시도 안에서 감소할 수 없다. `SUCCEEDED`, `FAILED`, `CANCELLED`는 일반 진행 상태 갱신의 대상이 아니다. 재시도 가능한 `FAILED` 작업만 아래 정책에 따라 `QUEUED`로 되돌릴 수 있다.
 - 단일 분석 워커 재시작 시 진행 중이던 작업은 `WORKER_INTERRUPTED` 오류로 감지하고, 남은 시도가 있으면 시작 과정에서 자동 재대기시킨다. 최대 시도 횟수를 소진했다면 `FAILED`로 남긴다. API 서버 시작은 실행 중 작업 상태를 변경하지 않는다. 대기 작업은 대기 상태로 남는다.
 
+## 공유 원본 입력 추가 검토 (2026-11-18)
+
+- `att.path`·`atg.path` 입력도 호환성을 위해 DOWNLOADING 상태를 사용하되,
+  상태 메시지는 Preparing ATT/ATG files다. path 파일을 다운로드하지 않는다.
+- URL 예비 방식과 기존 object_key는 기존 fetch 과정을 유지한다.
+- path 입력의 원본은 읽기 전용이며 성공·실패·취소 시 삭제하지 않는다.
+- `INVALID_SHARED_PATH`, `SHARED_INPUT_NOT_CONFIGURED`는 자동 재시도하지 않는다.
+- 서버 미적용 검토본이며 세부 계약은 Q15_SHARED_PATH_V1_1_DRAFT.md를 따른다.
+
 ## 작업 취소
 
 - `POST /api/v1/analysis-jobs/{job_id}/cancel`은 `QUEUED` 작업을 즉시 `CANCELLED`로 바꾼다. 실행 중에는 `cancel_requested=true`를 영속 저장하고 HTTP 202로 현재 상태를 반환한다. INT-004를 다시 조회해 `CANCELLED` 도달 여부를 확인한다.
