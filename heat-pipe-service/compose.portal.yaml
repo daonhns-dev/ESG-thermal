@@ -1,0 +1,28 @@
+# Apply with compose.yaml when the VTI portal shares this Docker host.
+# Create heatpipe-shared first, or let the portal installer create it.
+services:
+  api:
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    networks:
+      default:
+      heatpipe-shared:
+        aliases:
+          - daon-api
+
+  worker:
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    networks:
+      - default
+      - heatpipe-shared
+
+networks:
+  heatpipe-shared:
+    external: true

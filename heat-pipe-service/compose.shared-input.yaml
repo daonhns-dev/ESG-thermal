@@ -1,0 +1,23 @@
+# Enable only after VTI publishes complete, immutable plain ATT/ATG files.
+# This directory MUST NOT be MinIO's backing-store directory.
+services:
+  api:
+    environment:
+      HEATPIPE_SHARED_INPUT_ROOT: /shared-input
+    volumes:
+      - type: bind
+        source: ${HEATPIPE_SHARED_INPUT_HOST_ROOT:?Set the published plain-file root}
+        target: /shared-input
+        read_only: true
+        bind:
+          create_host_path: false
+  worker:
+    environment:
+      HEATPIPE_SHARED_INPUT_ROOT: /shared-input
+    volumes:
+      - type: bind
+        source: ${HEATPIPE_SHARED_INPUT_HOST_ROOT:?Set the published plain-file root}
+        target: /shared-input
+        read_only: true
+        bind:
+          create_host_path: false

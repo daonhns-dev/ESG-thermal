@@ -1,0 +1,17 @@
+# Add after the existing Compose overlays, only after an offline data migration.
+# Both services keep /data internally; the shared source directory is separate.
+services:
+  api:
+    volumes:
+      - type: bind
+        source: ${HEATPIPE_EXTERNAL_ANALYSIS_ROOT:?Set the migrated analysis directory}
+        target: /data
+        bind:
+          create_host_path: false
+  worker:
+    volumes:
+      - type: bind
+        source: ${HEATPIPE_EXTERNAL_ANALYSIS_ROOT:?Set the migrated analysis directory}
+        target: /data
+        bind:
+          create_host_path: false
