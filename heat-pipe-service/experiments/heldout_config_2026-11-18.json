@@ -1,0 +1,13 @@
+{
+  "frozen_at": "2026-11-18, before any held-out E1 ranking or review image was opened",
+  "heldout_files": ["20261026_005923", "20261029_002254"],
+  "heldout_runs": "output/experiments/heldout-20261118/e1",
+  "heldout_att_dir": "E:/heatpipe/datasets_TB",
+  "dev_motion_dir": "output/experiments/dev-motion-20261118/inlier-0.70",
+  "min_inlier_ratio": 0.70,
+  "vehicle_features": "base",
+  "vehicle_weight": 0.05,
+  "distinct_gap_frames": 3,
+  "distinct_pad_px": 8,
+  "limit": 50
+}
