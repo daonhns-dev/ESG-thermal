@@ -1,0 +1,13 @@
+# Preparation only: preserve the existing MinIO volume before its disk migration.
+# Add after docker-compose.prod.yml and docker-compose.daon-net.yml.
+# Coordinate any actual portal operation with VTI; this file does not export originals.
+services:
+  minio:
+    volumes:
+      - type: volume
+        source: existing_portal_minio_data
+        target: /data
+volumes:
+  existing_portal_minio_data:
+    external: true
+    name: heatpipe-portal_minio-data
