@@ -125,7 +125,7 @@ class JobStore:
 
     def create(self, request: CreateJobRequest, idempotency_key: str | None = None) -> JobStatusResponse:
         now = _now()
-        request_json = request.model_dump_json()
+        request_json = request.model_dump_json(exclude_none=True)
         with self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             if idempotency_key is not None:
@@ -141,12 +141,10 @@ class JobStore:
                     raise IdempotencyConflict("Idempotency-Key was already used for a different request")
                 job_id = existing["job_id"]
                 if existing["status"] == JobStatus.QUEUED:
-                    if original.att.url is not None and request.att.url is not None:
-                        original.att.url = request.att.url
-                    if original.atg.url is not None and request.atg.url is not None:
-                        original.atg.url = request.atg.url
+                    original.att = request.att
+                    original.atg = request.atg
                     db.execute("UPDATE jobs SET request_json=? WHERE job_id=?",
-                               (original.model_dump_json(), job_id))
+                               (original.model_dump_json(exclude_none=True), job_id))
             else:
                 cursor = db.execute(
                     """INSERT INTO jobs (

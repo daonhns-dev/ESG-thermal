@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
 
 
 class WireModel(BaseModel):
@@ -34,6 +34,13 @@ class Roi(WireModel):
 
 
 class FileReference(WireModel):
+    model_config = ConfigDict(extra="forbid", json_schema_extra={
+        "description": "Exactly one non-null location: path (shared original), url (download fallback), or legacy object_key. Path requires size_bytes and sha256.",
+    })
+    path: str | None = Field(
+        default=None, min_length=1,
+        description="POSIX relative path beneath the worker's shared input root; never a host or absolute path. Requires size_bytes and sha256.",
+    )
     object_key: str | None = Field(default=None, min_length=1)
     url: HttpUrl | None = Field(
         default=None,
@@ -43,10 +50,22 @@ class FileReference(WireModel):
     size_bytes: int | None = Field(default=None, gt=0)
     sha256: str | None = Field(default=None, pattern=r"^[a-fA-F0-9]{64}$")
 
+    @field_validator("path")
+    @classmethod
+    def validate_shared_path(cls, value: str | None) -> str | None:
+        if value is not None and (
+            value.startswith("/") or any(char in value for char in ("\\", ":", "\x00"))
+            or any(part in {"", ".", ".."} for part in value.split("/"))
+        ):
+            raise ValueError("path must be a relative POSIX file path without empty, dot or parent components")
+        return value
+
     @model_validator(mode="after")
     def require_one_location(self) -> FileReference:
-        if (self.object_key is None) == (self.url is None):
-            raise ValueError("provide exactly one of object_key or url")
+        if sum(value is not None for value in (self.path, self.object_key, self.url)) != 1:
+            raise ValueError("provide exactly one of path, object_key or url")
+        if self.path is not None and (self.size_bytes is None or self.sha256 is None):
+            raise ValueError("path requires size_bytes and sha256")
         return self
 
 

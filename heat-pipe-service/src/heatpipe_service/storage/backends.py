@@ -44,8 +44,14 @@ def validate_source_url(
     url: str, allowed_hosts: frozenset[str], allowed_http_hosts: frozenset[str] = frozenset()
 ) -> None:
     parsed = urlparse(url)
-    if not ((parsed.scheme == "https" and parsed.hostname in allowed_hosts)
-            or (parsed.scheme == "http" and parsed.hostname in allowed_http_hosts)):
+    hostname = parsed.hostname
+    try:
+        port = parsed.port
+    except ValueError:
+        raise StorageError("SOURCE_URL_NOT_ALLOWED", "Source URL scheme or host is not allowed") from None
+    allowed = allowed_hosts if parsed.scheme == "https" else allowed_http_hosts
+    if not (parsed.scheme in {"https", "http"} and hostname
+            and (hostname in allowed or (port is not None and f"{hostname}:{port}" in allowed))):
         raise StorageError("SOURCE_URL_NOT_ALLOWED", "Source URL scheme or host is not allowed")
 
 
@@ -103,6 +109,8 @@ class LocalStorage:
 
     def fetch(self, reference: FileReference, destination: Path,
               should_cancel: Callable[[], bool] | None = None) -> None:
+        if reference.path is not None:
+            raise StorageError("INVALID_SHARED_PATH", "Shared paths must be read directly by the worker")
         destination.parent.mkdir(parents=True, exist_ok=True)
         temporary = destination.with_name(destination.name + ".download")
         try:
@@ -166,6 +174,8 @@ class MinioStorage:
     def fetch(self, reference: FileReference, destination: Path,
               should_cancel: Callable[[], bool] | None = None) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)
+        if reference.path is not None:
+            raise StorageError("INVALID_SHARED_PATH", "Shared paths must be read directly by the worker")
         temporary = destination.with_name(destination.name + ".download")
         try:
             if reference.object_key is not None:

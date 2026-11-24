@@ -22,6 +22,7 @@ from heatpipe_service.jobs.batch import BatchConfig, BatchProgress, BatchRequest
 from heatpipe_service.jobs.store import InvalidJobUpdate, JobStore
 from heatpipe_service.security import redact_url_query
 from heatpipe_service.storage.backends import Storage, StorageError, storage_from_env
+from heatpipe_service.storage.shared_inputs import link_shared_input
 
 logger = logging.getLogger(__name__)
 HEARTBEAT_INTERVAL_SECONDS = 5.0
@@ -105,10 +106,23 @@ class JobWorker:
         att = input_dir / f"{request.monitoring_data_id}.att"
         atg = input_dir / f"{request.monitoring_data_id}.atg"
 
-        self.store.update(job_id, JobStatus.DOWNLOADING, 5, 0, None, "Fetching ATT/ATG files")
-        self.storage.fetch(request.att, att, should_cancel=lambda: self.store.cancellation_requested(job_id))
-        self._check_cancel(job_id)
-        self.storage.fetch(request.atg, atg, should_cancel=lambda: self.store.cancellation_requested(job_id))
+        shared_root = os.environ.get("HEATPIPE_SHARED_INPUT_ROOT", "").strip()
+        has_shared_input = any(ref.path is not None for ref in (request.att, request.atg))
+        # Keep the existing wire state and progress contract in direct-file mode.
+        self.store.update(job_id, JobStatus.DOWNLOADING, 5, 0, None,
+                          "Preparing ATT/ATG files" if has_shared_input else "Fetching ATT/ATG files")
+        for reference, destination in ((request.att, att), (request.atg, atg)):
+            self._check_cancel(job_id)
+            if reference.path is not None:
+                if not shared_root or not Path(shared_root).is_absolute():
+                    raise StorageError("SHARED_INPUT_NOT_CONFIGURED", "Shared input root must be configured as an absolute path")
+                root = Path(shared_root).resolve()
+                if root.is_relative_to(self.work_root) or self.work_root.is_relative_to(root):
+                    raise StorageError("SHARED_INPUT_NOT_CONFIGURED", "Shared input and temporary work roots must be separate")
+                link_shared_input(reference, destination, root)
+            else:
+                self.storage.fetch(reference, destination,
+                                   should_cancel=lambda: self.store.cancellation_requested(job_id))
         self._check_cancel(job_id)
 
         def on_progress(progress: BatchProgress) -> None:

@@ -29,6 +29,7 @@ from heatpipe_service.api.models import (
 from heatpipe_service.jobs.store import IdempotencyConflict, InvalidJobUpdate, JobNotFound, JobStore
 from heatpipe_service.security import redact_url_query
 from heatpipe_service.storage.backends import Storage, StorageError, storage_from_env, validate_source_url
+from heatpipe_service.storage.shared_inputs import validate_shared_root
 
 
 class PngResponse(Response):
@@ -150,6 +151,15 @@ def create_app(
         ),
     ) -> CreateJobResponse:
         for reference in (request.att, request.atg):
+            if reference.path is not None:
+                shared_root = os.environ.get("HEATPIPE_SHARED_INPUT_ROOT", "").strip()
+                if not shared_root or not Path(shared_root).is_absolute():
+                    raise HTTPException(503, detail={"code": "SHARED_INPUT_NOT_CONFIGURED",
+                                                    "message": "Shared input root is not configured"})
+                try:
+                    validate_shared_root(Path(shared_root))
+                except StorageError as error:
+                    raise HTTPException(503, detail={"code": error.code, "message": str(error)}) from error
             if reference.url is not None:
                 try:
                     validate_source_url(

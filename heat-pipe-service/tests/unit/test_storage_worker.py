@@ -18,6 +18,11 @@ from heatpipe_service.jobs import batch as batch_module
 from heatpipe_service.jobs.store import JobStore
 from heatpipe_service.jobs.worker import JobWorker
 from heatpipe_service.storage.backends import LocalStorage, MinioStorage, StorageError, validate_source_url
+from heatpipe_service.storage.shared_inputs import SHARED_ROOT_MARKER, SHARED_ROOT_MARKER_CONTENT
+
+
+def _mark_shared_root(root):
+    (root / SHARED_ROOT_MARKER).write_bytes(SHARED_ROOT_MARKER_CONTENT)
 
 
 def _inputs(root: Path) -> tuple[Path, Path]:
@@ -68,10 +73,201 @@ def test_local_storage_validates_keys_size_and_checksum(tmp_path: Path) -> None:
 def test_internal_http_requires_its_own_explicit_host_allowlist() -> None:
     validate_source_url("https://files.example/data.att", frozenset({"files.example"}))
     validate_source_url("http://minio:9000/data.att?signature=redacted", frozenset(), frozenset({"minio"}))
+    validate_source_url("http://portal-minio:9000/data.att", frozenset(), frozenset({"portal-minio:9000"}))
+    with pytest.raises(StorageError, match="scheme or host"):
+        validate_source_url("http://portal-minio:9001/data.att", frozenset(), frozenset({"portal-minio:9000"}))
     with pytest.raises(StorageError, match="scheme or host"):
         validate_source_url("http://minio:9000/data.att", frozenset({"minio"}))
     with pytest.raises(StorageError, match="scheme or host"):
         validate_source_url("http://external.example/data.att", frozenset(), frozenset({"minio"}))
+
+
+@pytest.mark.parametrize("outcome", ["success", "failure", "cancel", "retry"])
+def test_shared_worker_skips_fetch_and_preserves_originals(tmp_path, monkeypatch, outcome):
+    shared = tmp_path / "shared" / "heatpipe-portal" / "raw"
+    shared.mkdir(parents=True)
+    _mark_shared_root(tmp_path / "shared")
+    att, atg = _inputs(shared)
+    att.rename(shared / "different-att.att")
+    atg.rename(shared / "different-atg.atg")
+    att, atg = shared / "different-att.att", shared / "different-atg.atg"
+    originals = (att.read_bytes(), atg.read_bytes())
+    monkeypatch.setenv("HEATPIPE_SHARED_INPUT_ROOT", str(tmp_path / "shared"))
+    monkeypatch.setenv("HEATPIPE_ALLOWED_INTERNAL_HTTP_HOSTS", "portal-minio:9000")
+    storage = LocalStorage(tmp_path / "objects")
+    def forbidden_fetch(*args, **kwargs):
+        pytest.fail("Direct shared-file analysis must not fetch or copy input files")
+    monkeypatch.setattr(storage, "fetch", forbidden_fetch)
+    store = JobStore(tmp_path / "jobs.sqlite3")
+    job = store.create(CreateJobRequest.model_validate({
+        "monitoring_data_id": "shared-job",
+        "att": {"path": "heatpipe-portal/raw/different-att.att",
+                "size_bytes": len(originals[0]), "sha256": hashlib.sha256(originals[0]).hexdigest()},
+        "atg": {"path": "heatpipe-portal/raw/different-atg.atg",
+                "size_bytes": len(originals[1]), "sha256": hashlib.sha256(originals[1]).hexdigest()},
+    }))
+    worker = JobWorker(store, storage, tmp_path / "work")
+    if outcome != "success":
+        import heatpipe_service.jobs.worker as worker_module
+        from heatpipe_service.cancellation import JobCancelled
+        if outcome != "retry":
+            with sqlite3.connect(tmp_path / "jobs.sqlite3") as db:
+                db.execute("UPDATE jobs SET attempt=3 WHERE job_id=?", (job.job_id,))
+        def interrupted_batch(request, **kwargs):
+            assert request.att_path.is_symlink()
+            assert request.att_path.read_bytes() == originals[0]
+            if outcome == "cancel":
+                store.cancel(job.job_id)
+                raise JobCancelled()
+            if outcome == "retry":
+                raise StorageError("UPLOAD_FAILED", "Injected retryable failure")
+            raise ValueError("Injected analysis failure")
+        monkeypatch.setattr(worker_module, "run_batch_safely", interrupted_batch)
+    assert worker.run_once() == job.job_id
+    expected = {"success": JobStatus.SUCCEEDED, "failure": JobStatus.FAILED,
+                "cancel": JobStatus.CANCELLED, "retry": JobStatus.QUEUED}[outcome]
+    assert store.get(job.job_id).status == expected
+    assert not (tmp_path / "work" / job.job_id).exists()
+    assert (att.read_bytes(), atg.read_bytes()) == originals
+    if outcome != "success":
+        return
+    result = json.loads(storage.read_bytes(store.get_result_key(job.job_id)))
+    assert result["processing"]["input"]["att_file_name"] == "shared-job.att"
+    assert result["candidates"]
+    api = TestClient(create_app(tmp_path / "jobs.sqlite3", storage=storage, api_token="test"))
+    api.headers["Authorization"] = "Bearer test"
+    assert api.get(f"/api/v1/analysis-jobs/{job.job_id}").json()["status"] == "SUCCEEDED"
+    response = api.get(f"/api/v1/analysis-jobs/{job.job_id}/results")
+    assert response.status_code == 200
+    candidate = response.json()["candidates"][0]
+    png = api.get(candidate["result_image"]["path"])
+    assert png.status_code == 200 and png.headers["content-type"].startswith("image/png")
+    assert hashlib.sha256(png.content).hexdigest() == candidate["result_image"]["sha256"]
+
+
+def test_shared_input_rejects_invalid_sources(tmp_path):
+    from heatpipe_service.storage.shared_inputs import link_shared_input
+    root = tmp_path / "shared"
+    root.mkdir()
+    _mark_shared_root(root)
+    destination = tmp_path / "work" / "sample.att"
+    for key in ("missing.att", "object.att"):
+        if key == "object.att":
+            (root / key).mkdir()  # MinIO object directories are not plain input files.
+        with pytest.raises(StorageError, match="regular file"):
+            link_shared_input(FileReference(path=key, size_bytes=1, sha256="0" * 64), destination, root)
+    (root / "sample.att").write_bytes(b"input")
+    with pytest.raises(StorageError, match="size"):
+        link_shared_input(FileReference(path="sample.att", size_bytes=99, sha256="0" * 64), destination, root)
+    with pytest.raises(StorageError):
+        link_shared_input(FileReference(url="http://portal-minio:9000/file.att"), destination, root)
+    assert not destination.exists()
+
+
+@pytest.mark.parametrize("mixed", [False, True])
+def test_shared_root_does_not_override_url_fallback(tmp_path, monkeypatch, mixed):
+    import heatpipe_service.storage.backends as backends
+    root = tmp_path / "published"
+    root.mkdir()
+    _mark_shared_root(root)
+    att, atg = _inputs(root)
+    monkeypatch.setenv("HEATPIPE_SHARED_INPUT_ROOT", str(root))
+    calls = []
+    def download(url, destination, *args):
+        calls.append(url)
+        source = att if url.endswith(".att") else atg
+        destination.write_bytes(source.read_bytes())
+    monkeypatch.setattr(backends, "_download_url", download)
+    request = {
+        "monitoring_data_id": "sample",
+        "att": {"url": "https://example.test/sample.att"},
+        "atg": {"url": "https://example.test/sample.atg"},
+    }
+    if mixed:
+        request["att"] = {"path": "sample.att", "size_bytes": att.stat().st_size,
+                          "sha256": hashlib.sha256(att.read_bytes()).hexdigest()}
+    else:
+        (root / SHARED_ROOT_MARKER).unlink()  # URL fallback does not depend on shared storage.
+    storage = LocalStorage(tmp_path / "objects", frozenset({"example.test"}))
+    store = JobStore(tmp_path / "jobs.sqlite3")
+    job = store.create(CreateJobRequest.model_validate(request))
+    JobWorker(store, storage, tmp_path / "work").run_once()
+    assert store.get(job.job_id).status == JobStatus.SUCCEEDED
+    assert calls == (["https://example.test/sample.atg"] if mixed else
+                     ["https://example.test/sample.att", "https://example.test/sample.atg"])
+    assert att.is_file() and atg.is_file()
+
+
+@pytest.mark.parametrize("interrupted_attempt", [1, 2])
+@pytest.mark.parametrize("leftover", ["both", "att-only", "dangling"])
+def test_shared_inputs_resume_after_worker_interruption(tmp_path, monkeypatch, interrupted_attempt, leftover):
+    root = tmp_path / "published"
+    root.mkdir()
+    _mark_shared_root(root)
+    att, atg = _inputs(root)
+    original = (att.read_bytes(), atg.read_bytes())
+    monkeypatch.setenv("HEATPIPE_SHARED_INPUT_ROOT", str(root))
+    db = tmp_path / "jobs.sqlite3"
+    store = JobStore(db)
+    request = CreateJobRequest.model_validate({
+        "monitoring_data_id": "sample",
+        "att": {"path": "sample.att", "size_bytes": len(original[0]),
+                "sha256": hashlib.sha256(original[0]).hexdigest()},
+        "atg": {"path": "sample.atg", "size_bytes": len(original[1]),
+                "sha256": hashlib.sha256(original[1]).hexdigest()},
+    })
+    job = store.create(request)
+    assert store.claim_next() == job.job_id
+    store.update(job.job_id, JobStatus.DOWNLOADING, 5, 0, None, "Preparing ATT/ATG files")
+    with sqlite3.connect(db) as connection:
+        connection.execute("UPDATE jobs SET attempt=? WHERE job_id=?", (interrupted_attempt, job.job_id))
+    old_input = tmp_path / "work" / job.job_id / "input"
+    old_input.mkdir(parents=True)
+    (old_input / "sample.att").symlink_to(root / "gone.att" if leftover == "dangling" else att)
+    if leftover == "both":
+        (old_input / "sample.atg").symlink_to(atg)
+    # Same recovery calls as the actual worker entry point; finally did not run.
+    recovered = JobStore(db)
+    assert recovered.recover_interrupted() == 1
+    assert recovered.get(job.job_id).error.code == "WORKER_INTERRUPTED"
+    assert recovered.requeue_pending_retries() == 1
+    storage = LocalStorage(tmp_path / "objects")
+    def no_fetch(*args, **kwargs):
+        pytest.fail("Recovered path jobs must not download")
+    monkeypatch.setattr(storage, "fetch", no_fetch)
+    JobWorker(recovered, storage, tmp_path / "work").run_once()
+    status = recovered.get(job.job_id)
+    assert status.status == JobStatus.SUCCEEDED
+    assert status.attempt == interrupted_attempt + 1
+    assert not (tmp_path / "work" / job.job_id).exists()
+    assert (att.read_bytes(), atg.read_bytes()) == original
+
+
+def test_shared_storage_lost_after_admission_reports_configuration_error(tmp_path, monkeypatch):
+    root = tmp_path / "published"
+    root.mkdir()
+    _mark_shared_root(root)
+    att, atg = _inputs(root)
+    monkeypatch.setenv("HEATPIPE_SHARED_INPUT_ROOT", str(root))
+    storage = LocalStorage(tmp_path / "objects")
+    db = tmp_path / "jobs.sqlite3"
+    client = TestClient(create_app(db, storage=storage, api_token="test"))
+    client.headers["Authorization"] = "Bearer test"
+    body = {"monitoring_data_id": "sample"}
+    for name, file in (("att", att), ("atg", atg)):
+        body[name] = {"path": file.name, "size_bytes": file.stat().st_size,
+                      "sha256": hashlib.sha256(file.read_bytes()).hexdigest()}
+    response = client.post("/api/v1/analysis-jobs", json=body)
+    assert response.status_code == 202
+    (root / SHARED_ROOT_MARKER).unlink()
+    store = JobStore(db)
+    JobWorker(store, storage, tmp_path / "work").run_once()
+    failed = store.get(response.json()["job_id"])
+    assert failed.status == JobStatus.FAILED
+    assert failed.error.code == "SHARED_INPUT_NOT_CONFIGURED"
+    assert failed.error.retryable is False
+    assert failed.attempt == 1
+    assert att.is_file() and atg.is_file()
 
 
 def test_worker_runs_batch_and_uploads_result(tmp_path: Path) -> None:
