@@ -1,0 +1,17 @@
+{
+  "monitoring_data_id": "shared-path-example",
+  "att": {
+    "path": "2026/11/example-att.att",
+    "size_bytes": 49160,
+    "sha256": "746bf3721b174f836b8ab6bf8dbf6eee4063ad160563bbe110e6efb14bf24c1a"
+  },
+  "atg": {
+    "path": "2026/11/example-atg.atg",
+    "size_bytes": 156,
+    "sha256": "1e50d7bce6c680567af29a1d912651fa7d938ac27db25796ff6fc0c56820112a"
+  },
+  "frame_range": {
+    "start": 0,
+    "end_exclusive": 4
+  }
+}

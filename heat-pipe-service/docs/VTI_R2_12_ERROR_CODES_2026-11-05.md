@@ -17,6 +17,7 @@ HTTP 오류 본문은 모든 API에서 `application/json`의 `{"error":{"code":"
 | 422 | `SOURCE_URL_NOT_ALLOWED` | URL 스킴·호스트가 배포 환경의 허용 목록에 없음(외부 HTTP 불허, 내부 HTTP는 별도 허용 호스트만 가능) |
 | 503 | `AUTH_NOT_CONFIGURED` | 서버 인증키 미설정 |
 | 503 | `RESULT_STORAGE_ERROR` | 결과 JSON·PNG 조회 실패 |
+| 503 | `SHARED_INPUT_NOT_CONFIGURED` | 2026-11-18 방안 A 검토본 추가: path 입력의 공유 루트 미설정·비절대 경로·표식 누락/불일치/읽기 실패 |
 
 정의되지 않은 경로·메서드 등 프레임워크 오류도 같은 JSON 본문으로 정규화한다. 메서드 오류 405는 `METHOD_NOT_ALLOWED`, 예기치 않은 서버 오류 500은 `INTERNAL_SERVER_ERROR`다. 일반 503의 보조 코드 `SERVICE_UNAVAILABLE`도 예약되어 있다.
 
@@ -27,6 +28,8 @@ HTTP 오류 본문은 모든 API에서 `application/json`의 `{"error":{"code":"
 | `INPUT_FILE_NOT_FOUND` | 아니요 | 입력 파일 없음 |
 | `INVALID_ANALYSIS_REQUEST` | 아니요 | 분석 입력·ROI·설정 오류 |
 | `INVALID_OBJECT_KEY` | 아니요 | 저장소 Object Key 형식 오류 |
+| `INVALID_SHARED_PATH` | 아니요 | 방안 A 검토본 추가: 공유 원본이 허용 루트 밖을 가리킴 |
+| `SHARED_INPUT_NOT_CONFIGURED` | 아니요 | 방안 A 검토본 추가: 워커 공유 루트 미설정, 표식 누락/불일치/읽기 실패 또는 임시 작업 폴더와 겹침 |
 | `FILE_INTEGRITY_ERROR` | 아니요 | 입력 파일 크기·SHA-256 불일치 |
 | `SOURCE_URL_NOT_ALLOWED` | 아니요 | 워커 다운로드 시 URL 정책 위반 |
 | `DOWNLOAD_FAILED` | 예 | URL·MinIO 다운로드 오류 |

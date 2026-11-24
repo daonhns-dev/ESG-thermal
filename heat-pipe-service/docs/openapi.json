@@ -132,7 +132,7 @@
                 }
               }
             },
-            "description": "Unprocessable Content"
+            "description": "Unprocessable Entity"
           },
           "503": {
             "content": {
@@ -220,7 +220,7 @@
                 }
               }
             },
-            "description": "Unprocessable Content"
+            "description": "Unprocessable Entity"
           },
           "503": {
             "content": {
@@ -297,7 +297,7 @@
                 }
               }
             },
-            "description": "Unprocessable Content"
+            "description": "Unprocessable Entity"
           },
           "503": {
             "content": {
@@ -385,7 +385,7 @@
                 }
               }
             },
-            "description": "Unprocessable Content"
+            "description": "Unprocessable Entity"
           },
           "503": {
             "content": {
@@ -483,7 +483,7 @@
                 }
               }
             },
-            "description": "Unprocessable Content"
+            "description": "Unprocessable Entity"
           },
           "503": {
             "content": {
@@ -876,6 +876,19 @@
       },
       "FileReference": {
         "properties": {
+          "path": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path",
+            "description": "POSIX relative path beneath the worker's shared input root; never a host or absolute path. Requires size_bytes and sha256."
+          },
           "object_key": {
             "anyOf": [
               {
@@ -930,7 +943,8 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "title": "FileReference"
+        "title": "FileReference",
+        "description": "Exactly one non-null location: path (shared original), url (download fallback), or legacy object_key. Path requires size_bytes and sha256."
       },
       "Gps": {
         "properties": {

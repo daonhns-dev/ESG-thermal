@@ -19,6 +19,7 @@ from reportlab.platypus import (
     KeepTogether,
     PageTemplate,
     Paragraph,
+    PageBreak,
     Spacer,
     Table,
     TableStyle,
@@ -29,6 +30,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "docs" / "Q15_VTI_INTEGRATION_API_FINAL.md"
 OUTPUT = ROOT / "output" / "pdf" / "Q15_API_명세서_v1.0_2차검토반영본_20261106.pdf"
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+DOCUMENT_TITLE = "Q15 VTI-DaonH&S 연동 API 명세 2차 검토 반영본"
+DOCUMENT_VERSION = "v1.0"
+DOCUMENT_DATE = "2026-11-06"
 
 pdfmetrics.registerFont(TTFont("Malgun", r"C:\Windows\Fonts\malgun.ttf"))
 pdfmetrics.registerFont(TTFont("MalgunBold", r"C:\Windows\Fonts\malgunbd.ttf"))
@@ -97,7 +101,9 @@ def as_table(lines: list[str]) -> Table:
     count = len(rows[0])
     width = 505
     if count == 3:
-        if "HTTP" in lines[0]:
+        if "error.code" in lines[0]:
+            widths = [70, 165, 270]
+        elif "HTTP" in lines[0]:
             widths = [52, 150, 303]
         elif "포털 백엔드" in lines[0]:
             widths = [110, 198, 197]
@@ -105,8 +111,12 @@ def as_table(lines: list[str]) -> Table:
             widths = [124, 146, 235]
         else:
             widths = [125, 45, 335]
-    else:
+    elif count == 4:
+        widths = [110, 60, 90, 245]
+    elif count == 2:
         widths = [132, 373]
+    else:
+        widths = [width / count] * count
     table = Table(rows, colWidths=widths, repeatRows=1, hAlign="LEFT")
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), NAVY),
@@ -128,10 +138,10 @@ def header_footer(canvas, doc) -> None:
     canvas.line(45, height - 42, width - 45, height - 42)
     canvas.setFont("MalgunBold", 8)
     canvas.setFillColor(NAVY)
-    canvas.drawString(45, height - 33, "DaonH&S  |  Q15 연동 API 명세 2차 검토 반영본")
+    canvas.drawString(45, height - 33, "DaonH&S  |  " + DOCUMENT_TITLE)
     canvas.setFont("Malgun", 8)
     canvas.setFillColor(GRAY)
-    canvas.drawRightString(width - 45, 30, f"v1.0 · 2026-11-06  |  {doc.page}")
+    canvas.drawRightString(width - 45, 30, f"{DOCUMENT_VERSION} · {DOCUMENT_DATE}  |  {doc.page}")
     canvas.restoreState()
 
 
@@ -143,6 +153,10 @@ def main() -> None:
     while index < len(lines):
         line = lines[index].strip()
         if not line:
+            index += 1
+            continue
+        if line == "<!-- pagebreak -->":
+            story.append(PageBreak())
             index += 1
             continue
         if line.startswith("# "):
@@ -169,7 +183,9 @@ def main() -> None:
                 index += 1
             if index < len(lines):
                 index += 1
-            code_rows = [Paragraph(html.escape(x) if x else "&nbsp;", CODE) for x in block]
+            code_rows = [Paragraph(
+                "&nbsp;" * (len(x) - len(x.lstrip(" "))) + html.escape(x.lstrip(" "))
+                if x else "&nbsp;", CODE) for x in block]
             if code_rows:
                 story.append(KeepTogether(code_rows[:3]))
                 story.extend(code_rows[3:])
@@ -188,7 +204,7 @@ def main() -> None:
 
     doc = BaseDocTemplate(
         str(OUTPUT), pagesize=A4, leftMargin=45, rightMargin=45,
-        topMargin=58, bottomMargin=47, title="Q15 VTI-DaonH&S 연동 API 명세 2차 검토 반영본",
+        topMargin=58, bottomMargin=47, title=DOCUMENT_TITLE,
         author="DaonH&S",
     )
     frame = Frame(45, 47, 505, A4[1] - 105, leftPadding=0, rightPadding=0,
