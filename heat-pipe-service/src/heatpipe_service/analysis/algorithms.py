@@ -43,15 +43,8 @@ def percentile_contrast(grid_c: np.ndarray, size: int = 31, percentile: float = 
     return _robust_scale(grid_c - background)
 
 
-def score_map(
-    grid_c: np.ndarray,
-    algorithm: str,
-    bg_method: str = "gaussian",
-    bg_param: float = 45,
-    top_hat_sizes: Sequence[int] = (15, 31, 61),
-    percentile_size: int = 31,
-    percentile: float = 40,
-) -> np.ndarray:
+def score_map(grid_c: np.ndarray, algorithm: str, bg_method: str = "gaussian", bg_param: float = 45,
+              top_hat_sizes: Sequence[int] = (15, 31, 61), percentile_size: int = 31, percentile: float = 40,) -> np.ndarray:
     if algorithm == "robust_zscore":
         return robust_zscore(grid_c, bg_method, bg_param)
     if algorithm == "top_hat_zscore":
